@@ -1,0 +1,32 @@
+{
+  "version": "0.2.0",
+  "environment": "development",
+  "author": "Blackline Labs",
+  "paths": {
+    "root": "./",
+    "frontend": "frontend/",
+    "backend": "backend/",
+    "midend": "midend/",
+    "config": "config/",
+    "logs": "logs/",
+    "temp": "tmp/"
+  },
+  "logging": {
+    "level": "info",
+    "log_to_file": true,
+    "log_dir": "logs/"
+  },
+  "shell": {
+    "default_prompt": "blackline> ",
+    "color_theme": "neon",
+    "history_limit": 200
+  },
+  "compiler": {
+    "default_target": "x86_64",
+    "optimization_level": 2
+  },
+  "network": {
+    "api_base_url": "http://localhost:8080",
+    "timeout_seconds": 10
+  }
+}
