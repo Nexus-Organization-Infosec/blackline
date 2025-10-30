@@ -10,8 +10,8 @@ from frontend.commands.utils.help_cmd import handle_help
 
 
 class BLShell(cmd.Cmd):
-    base_prompt = color("blackline ", "red", bold=True) + color("> ", "yellow")
-    intro = color("Type 'help' to get started.", "cyan")
+    base_prompt = color("blackline ", "turquoise", bold=True) + color("❯ ", "yellow")
+    intro = color("Type 'help' to get started.\n", "cyan")
 
     def __init__(self):
         super().__init__()
