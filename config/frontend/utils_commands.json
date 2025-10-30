@@ -1,0 +1,137 @@
+{
+  "commands": [
+    {
+      "name": "run",
+      "summary": "Execute the currently selected .bline module or a one-off command immediately.",
+      "details": "Runs the currently active configuration or .bline module immediately.\nThis command triggers execution without saving any new state or changes.\nIdeal for quick testing or one-shot workflows that don’t require persistence.",
+      "syntax_examples": ["run"],
+      "behavior": {
+        "one_shot": true,
+        "runs_active_config": true
+      }
+    },
+    {
+      "name": "use",
+      "summary": "Temporarily load one or more .bline modules for immediate use.",
+      "details": "Loads .bline modules into memory for temporary use within the current session.\nAccepts file paths or numeric indexes retrieved from the `list` command.\nModules loaded this way remain active until the session ends or another configuration is loaded.",
+      "syntax_examples": ["use /home/user/chain.bline", "use 1 2", "use 1,2"],
+      "args": ["<path_or_index>..."],
+      "behavior": {
+        "temp_load": true,
+        "accepts_multiple": true
+      }
+    },
+    {
+      "name": "load",
+      "summary": "Persistently load a .bline module into session storage.",
+      "details": "Loads a .bline module into persistent session memory, keeping it available until explicitly unloaded.\nUseful for reusing common module chains or work environments across multiple runs.",
+      "syntax_examples": ["load /home/user/chain.bline"],
+      "args": ["<path>"],
+      "behavior": {
+        "persistent_load": true
+      }
+    },
+    {
+      "name": "import",
+      "summary": "Import a .bline file into the local database for later use.",
+      "details": "Stores an external .bline file in the local workspace database.\nImported modules can be referenced by name or index via the `list` and `use` commands.\nOptionally supports overwrite behavior if a file already exists in the database.",
+      "syntax_examples": ["import /tmp/stuff.bline", "import ./incoming/chain.bline"],
+      "args": ["<path>", "overwrite="],
+      "behavior": {
+        "saves_to_db": true
+      }
+    },
+    {
+      "name": "export",
+      "summary": "Export a stored .bline file to a given path.",
+      "details": "Writes a stored .bline module to disk for sharing or backup.\nIf no destination is provided, the file will be written to the user’s home directory by default.\nAccepts either a module ID or name for lookup.",
+      "syntax_examples": ["export 3 path=/home/user/", "export my_chain"],
+      "args": ["id|name", "path="],
+      "behavior": {
+        "writes_file": true
+      }
+    },
+    {
+      "name": "list",
+      "summary": "List items in the current context.",
+      "details": "Displays loaded modules, saved workchains, payloads, tools, or historical data depending on the active context.\nUsed frequently to enumerate available resources for use or modification.",
+      "syntax_examples": ["list", "list payloads", "list modules"],
+      "behavior": {
+        "context_sensitive": true
+      }
+    },
+    {
+      "name": "edit",
+      "summary": "Open a .bline file in the configured editor.",
+      "details": "Opens the specified .bline file for modification.\nIf the file does not exist, the system prompts to create a new one.\nSupports both inline and external editors based on configuration.",
+      "syntax_examples": ["edit test.bline", "edit /path/to/my.bline"],
+      "args": ["<path>"],
+      "behavior": {
+        "interactive": true,
+        "create_if_missing": true
+      }
+    },
+    {
+      "name": "delete",
+      "summary": "Delete a .bline file from disk or the local database.",
+      "details": "Removes a .bline module from the filesystem or the local workspace database.\nSupports both file paths and numeric indexes. Confirmation may be required unless forced deletion is specified.",
+      "syntax_examples": ["delete /path/to/old.bline", "delete test.bline"],
+      "args": ["<path_or_id>", "force="],
+      "behavior": {
+        "confirm": true
+      }
+    },
+    {
+      "name": "reset",
+      "summary": "Reset the current environment and clear all loaded data.",
+      "details": "Resets all environment variables, globals, and currently loaded modules.\nUsed to return the shell to a clean, default state without restarting the process.",
+      "syntax_examples": ["reset"],
+      "behavior": {
+        "reset_context": true
+      }
+    },
+    {
+      "name": "clear",
+      "summary": "Clear the terminal screen.",
+      "details": "Clears the console display.\nDoes not affect program state, configuration, or command history.",
+      "syntax_examples": ["clear"]
+    },
+    {
+      "name": "update",
+      "summary": "Update modules, blocks, or core components.",
+      "details": "Checks for and applies updates to system components, command definitions, or tool chains.\nMay perform network operations depending on configuration.\nUser confirmation is typically required before applying major updates.",
+      "syntax_examples": ["update"],
+      "behavior": {
+        "auto_apply": false
+      }
+    },
+    {
+      "name": "history",
+      "summary": "Manage and query build or execution history.",
+      "details": "Provides access to past runs, builds, or workflows stored in local history.\nCan list all entries, search for specific ones, or clear stored history entirely.\nFilters and search terms are supported.",
+      "syntax_examples": ["history all", "history find <term>", "history show <id>", "history clear"],
+      "behavior": {
+        "supports_filters": true
+      }
+    },
+    {
+      "name": "version",
+      "summary": "Show current Blackline version and environment information.",
+      "details": "Displays the current Blackline version number, environment details, and system configuration.\nUseful for debugging or verifying compatibility with modules and workspace files.",
+      "syntax_examples": ["version"]
+    },
+    {
+      "name": "help",
+      "summary": "Show help information for commands or tools.",
+      "details": "Displays a list of all commands, tools, and operators available within the environment.\nWhen provided a command name, displays full details including syntax, arguments, and examples.",
+      "syntax_examples": ["help", "help recon"]
+    },
+    {
+      "name": "exit",
+      "summary": "Exit the Blackline shell environment.",
+      "details": "Terminates the current Blackline session.\nAutomatically saves session data and performs cleanup if enabled in configuration.\nCan also be invoked with the alias `quit`.",
+      "aliases": ["quit"],
+      "syntax_examples": ["exit", "quit"]
+    }
+  ]
+}
