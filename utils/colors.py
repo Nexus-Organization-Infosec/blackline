@@ -9,6 +9,7 @@ def color (text: str, color_name: str = "reset", bold: bool = False) -> str:
         "blue": "\033[34m",
         "magenta": "\033[35m",
         "cyan": "\033[36m",
+        "turquoise": "\033[38;5;45m",
         "white": "\033[37m",
         "purple": "\033[0;35m",
         "dark_purple": "\033[38;5;17m",
