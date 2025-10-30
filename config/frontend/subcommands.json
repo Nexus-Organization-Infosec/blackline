@@ -1,0 +1,34 @@
+{
+  "operators": {
+    "sequence": "&&",
+    "parallel": "&&",  
+    "background": "&",
+    "link": "->",
+    "conditional": "?when(condition)",
+    "pipe_like": "|"
+  },
+
+  "bline_lifecycle": {
+    "one_shot": { "flow": ["run"], "description": "Execute file once" },
+    "temp_use": { "flow": ["use", "run"], "description": "Load file temporarily and run" },
+    "long_term": { "flow": ["import", "use", "run"], "description": "Import into DB, then use by index" }
+  },
+
+  "list_behavior": {
+    "read_mode": "live_db",
+    "index_format": "1. Name (id:uuid) - path"
+  },
+
+  "gates": {
+    "syntax_examples": [
+      "if (target.os == 'windows') { try_exploit(all) } else { skip }",
+      "?when(target.os == 'linux') -> exploit"
+    ],
+    "notes": "Gate conditions are declarative. The runtime evaluates them against target metadata and decides flow."
+  },
+
+  "global_modifiers": {
+    "syntax": ["stealth++", "speed--"],
+    "notes": "Global modifiers mutate the global context and affect active/linked chains. They can be applied inline or in a separate global section."
+  }
+}
