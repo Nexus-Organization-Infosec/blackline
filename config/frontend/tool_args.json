@@ -1,0 +1,133 @@
+{
+  "tools": {
+    "recon": {
+      "summary": "Perform reconnaissance on targets (ip, url, emails, usernames, etc.).",
+      "details": "Performs reconnaissance across a variety of target identifiers such as IPs, URLs, emails, and usernames.\nSupports multi-target scanning, parallel/background execution, and conditional logic through operators.\nTypical workflow: recon → find_exploit → exploit → clean_up.\nResults can be piped or linked into subsequent commands for automated chaining.",
+      "syntax_examples": [
+        "recon ip=10.0.0.5",
+        "recon url=example.com emails=me@x.com",
+        "recon ip=1.2.3.4 options=parallel",
+        "recon ip=10.0.0.5 && recon url=example.com"
+      ],
+      "args": {
+        "ip": { "type": "string", "required": false, "description": "IPv4/IPv6 address or CIDR", "example": "192.0.2.10" },
+        "url": { "type": "string", "required": false, "description": "Target hostname or URL", "example": "https://example.com" },
+        "emails": { "type": "list<string>", "required": false, "description": "Comma-separated email addresses to check/enumerate", "example": "admin@example.com,me@x.com" },
+        "usernames": { "type": "list<string>", "required": false, "description": "Usernames to enumerate", "example": "root,admin" },
+        "ports": { "type": "string|list<int>", "required": false, "description": "Comma-separated ports or range", "example": "22,80,443" },
+        "profile": { "type": "string", "required": false, "enum": ["quick", "default", "aggressive"], "description": "Predefined scanning profile", "example": "quick" },
+        "timeout": { "type": "int", "required": false, "default": 60, "description": "Timeout in seconds", "example": 90 }
+      },
+      "behavior": {
+        "supports_parallel": true,
+        "supports_background": true,
+        "phases_defined": true
+      }
+    },
+
+    "find_exploit": {
+      "summary": "Search exploit databases for vulnerabilities matching discovered targets.",
+      "details": "Finds and maps known exploits against data gathered from the reconnaissance phase.\nSearches both local and remote databases, including exploit-db and user-defined sources.\nFilters can be applied using target_id, vulnerability name, or risk level.\nOutputs can be linked directly into the 'exploit' phase for automation.",
+      "args": {
+        "target_id": { "type": "string|int", "required": false, "description": "Target identifier returned by recon", "example": "1" },
+        "vuln_name": { "type": "string", "required": false, "description": "Name or pattern of vulnerability", "example": "CVE-2021-44228" },
+        "risk_level": { "type": "string", "required": false, "enum": ["low", "med", "high"], "description": "Filter by risk level", "example": "high" },
+        "db": { "type": "string", "required": false, "description": "Exploit database to query (exploit-db, local, or custom)", "example": "exploit-db" },
+        "limit": { "type": "int", "required": false, "default": 20, "description": "Limit the number of results returned", "example": 10 }
+      }
+    },
+
+    "exploit": {
+      "summary": "Attempt an exploit against a target using a selected payload or module.",
+      "details": "Executes exploit modules against a specified target based on data gathered from previous phases.\nCan operate in safe (simulation) or unsafe (live) mode.\nSupports credential-based logins, timeout configurations, and post-exploit session management.\nCommonly linked from 'find_exploit' to automate exploitation chains.",
+      "args": {
+        "target_id": { "type": "string|int", "required": true, "description": "Identifier for the target", "example": "1" },
+        "payload": { "type": "string", "required": true, "description": "Payload or exploit module name", "example": "reverse_shell" },
+        "username": { "type": "string", "required": false, "description": "Credential username if needed", "example": "admin" },
+        "password": { "type": "string", "required": false, "description": "Credential password if needed", "example": "P@ssw0rd" },
+        "timeout": { "type": "int", "required": false, "default": 120, "description": "Timeout in seconds for exploit attempt", "example": 300 },
+        "unsafe": { "type": "boolean", "required": false, "default": false, "description": "Allow risky or destructive actions", "example": true },
+        "dry_run": { "type": "boolean", "required": false, "default": false, "description": "Validate the exploit without performing destructive actions", "example": true }
+      }
+    },
+
+    "clean_up": {
+      "summary": "Clean up after exploitation, removing artifacts or reverting changes.",
+      "details": "Runs post-operation cleanup tasks to remove exploit artifacts, temporary files, or system changes.\nOptionally preserves logs for review or reporting.\nCan be executed manually or automatically at the end of a workflow.",
+      "args": {
+        "target_id": { "type": "string|int", "required": true, "description": "Target to clean up", "example": "1" },
+        "force": { "type": "boolean", "required": false, "default": false, "description": "Skip confirmations during cleanup", "example": true },
+        "preserve_logs": { "type": "boolean", "required": false, "default": true, "description": "Keep logs after cleanup", "example": false }
+      }
+    },
+
+    "parallel": {
+      "summary": "Run grouped commands concurrently within a single workflow.",
+      "details": "Executes multiple commands simultaneously with optional concurrency control.\nUseful for parallel scanning, exploit testing, or distributed tasks.\nCan automatically aggregate results upon completion.",
+      "args": {
+        "commands": { "type": "list<string|object>", "required": true, "description": "List of commands to run concurrently", "example": ["recon ip=1.2.3.4", "find_exploit target_id=1"] },
+        "max_concurrency": { "type": "int", "required": false, "default": 8, "description": "Maximum number of concurrent workers", "example": 4 },
+        "summary_on_complete": { "type": "boolean", "required": false, "default": true, "description": "Show a summary once all tasks finish", "example": true }
+      }
+    },
+
+    "gates": {
+      "summary": "Evaluate conditional expressions for branching workflows.",
+      "details": "Acts as the logical controller of your workflow chain.\nEvaluates conditional expressions and determines which branches to execute based on global or local variables.\nTypically represented by operators such as 'if(...) { } else { }'.",
+      "args": {
+        "expression": { "type": "string", "required": true, "description": "Conditional expression referencing globals and outputs", "example": "target.os == 'linux' && stealth > 3" },
+        "globals": { "type": "object", "required": false, "description": "Global modifiers referenced/modified by the expression", "example": { "stealth": 5 } }
+      }
+    },
+
+    "run": {
+      "summary": "Execute the currently selected or active .bline module.",
+      "details": "Runs the current configuration or active .bline chain immediately.\nActs as a one-shot trigger and respects all previously loaded parameters or linked configurations.\nNo arguments are required."
+    },
+
+    "use": {
+      "summary": "Temporarily load one or more .bline modules for immediate use.",
+      "details": "Allows quick activation of modules for on-the-fly use.\nAccepts either file paths or numeric indexes generated from 'list' output.\nModules remain active until explicitly replaced or reset.",
+      "args": {
+        "path_or_index": { "type": "array", "required": true, "description": "One or more paths or indices to load", "example": [1, "my.bline"] }
+      }
+    },
+
+    "import": {
+      "summary": "Import an external .bline file into the local workspace database.",
+      "details": "Adds an existing .bline module from disk into the persistent local database.\nOnce imported, modules become accessible via the 'list' and 'use' commands.",
+      "args": {
+        "path": { "type": "string", "required": true, "description": "Path to the .bline file to import", "example": "./chain.bline" },
+        "overwrite": { "type": "boolean", "required": false, "default": false, "description": "Overwrite if the file already exists in DB", "example": false }
+      }
+    },
+
+    "export": {
+      "summary": "Export a stored .bline file to a chosen location.",
+      "details": "Writes a .bline module from the local database to disk for sharing or backup.\nIf no path is provided, exports to the user's home directory by default.",
+      "args": {
+        "id": { "type": "string|int", "required": false, "description": "Stored .bline id or name", "example": "3" },
+        "name": { "type": "string", "required": false, "description": "Name of the stored .bline", "example": "night_run" },
+        "path": { "type": "string", "required": false, "default": "~/", "description": "Destination path for export", "example": "/home/user/" }
+      }
+    },
+
+    "edit": {
+      "summary": "Open and edit a .bline module in the configured editor.",
+      "details": "Launches either an inline editor or an external editor (based on configuration) to modify a .bline file.\nIf the specified file does not exist, the system will prompt to create it.",
+      "args": {
+        "id_or_path": { "type": "string", "required": true, "description": "ID or file path to edit", "example": "2" },
+        "mode": { "type": "string", "required": false, "enum": ["inline", "external"], "default": "inline", "description": "Editor mode to use", "example": "inline" }
+      }
+    },
+
+    "delete": {
+      "summary": "Delete a .bline file from disk or the workspace database.",
+      "details": "Removes a .bline module from the system.\nSupports both file paths and database references.\nWhen 'force' is false, user confirmation is required before deletion.",
+      "args": {
+        "id_or_path": { "type": "string", "required": true, "description": "ID or path of the .bline to delete", "example": "old_chain" },
+        "force": { "type": "boolean", "required": false, "default": false, "description": "Force deletion without confirmation", "example": true }
+      }
+    }
+  }
+}
