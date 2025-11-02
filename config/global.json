@@ -1,7 +1,7 @@
 {
   "version": "0.0.1",
   "environment": "development",
-  "author": "diputs-sudo, QWavey",
+  "author": "diputs-sudo",
   "paths": {
     "frontend": "frontend/",
     "backend": "backend/",
