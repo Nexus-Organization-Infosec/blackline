@@ -4,10 +4,10 @@
       "summary": "Perform reconnaissance on targets (ip, url, emails, usernames, etc.).",
       "details": "Performs reconnaissance across a variety of target identifiers such as IPs, URLs, emails, and usernames.\nSupports multi-target scanning, parallel/background execution, and conditional logic through operators.\nTypical workflow: recon → find_exploit → exploit → clean_up.\nResults can be piped or linked into subsequent commands for automated chaining.",
       "syntax_examples": [
-        "recon ip=10.0.0.5",
-        "recon url=example.com emails=me@x.com",
-        "recon ip=1.2.3.4 options=parallel",
-        "recon ip=10.0.0.5 && recon url=example.com"
+        "recon [ip=10.0.0.5]",
+        "recon [url=example.com emails=me@x.com]",
+        "recon [ip=1.2.3.4 options=parallel]",
+        "recon [ip=10.0.0.5 && recon url=example.com]"
       ],
       "args": {
         "ip": { "type": "string", "required": false, "description": "IPv4/IPv6 address or CIDR", "example": "192.0.2.10" },
