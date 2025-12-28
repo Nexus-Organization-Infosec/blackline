@@ -27,8 +27,6 @@ class BLShell(cmd.Cmd):
     def prompt(self):
         return self.base_prompt
 
-    # ---------- utils commands ----------
-
     def do_clear(self, _):
         handle_clear()
 
