@@ -1,32 +1,22 @@
+# blackline/midend/api.py
+#
+# Public interface to the midend planner.
+# Converts parsed intent into semantic Tasks.
+
+
+from typing import Dict, List
+
 from midend.planner import plan_intent
 
 
-def submit_intent(intent: dict) -> dict:
-    """
-    Entry point for workflow requests from the frontend.
-    """
-
+def submit_intent(intent: Dict) -> List[Dict]:
+    """Submit parsed intent to the planner."""
     if not isinstance(intent, dict):
-        return {
-            "status": "error",
-            "errors": ["Invalid intent object"]
-        }
+        return []
 
-    if intent.get("errors"):
-        return {
-            "status": "error",
-            "errors": intent["errors"]
-        }
+    tasks = plan_intent(intent)
 
-    try:
-        tasks = plan_intent(intent)
-    except Exception as e:
-        return {
-            "status": "error",
-            "errors": [str(e)]
-        }
+    if not isinstance(tasks, list):
+        return []
 
-    return {
-        "status": "ok",
-        "tasks": tasks
-    }
+    return tasks
