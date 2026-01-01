@@ -1,9 +1,11 @@
 import textwrap
+
 from config.frontend.frontend_config import (
     get_utils_commands,
     get_tools,
     get_operators,
 )
+
 from utils.display import (
     print_info,
     print_error,
@@ -11,7 +13,12 @@ from utils.display import (
     indent_wrap,
     draw_line,
 )
+
 from utils.colors import color
+
+from prompt_toolkit import print_formatted_text
+from prompt_toolkit.formatted_text import ANSI
+
 
 ARROW = "→"
 
@@ -33,13 +40,15 @@ def _print_section(title: str, color_name: str, entries: list, is_tool: bool = F
         return
 
     width = get_terminal_width()
-    print(color(f"[{title.upper()}]", color_name, bold=True))
+
+    print_formatted_text(ANSI(color(f"[{title.upper()}]", color_name, bold=True)))
     draw_line("-", "white", width=width)
 
     if is_tool:
         names = [entry[0] for entry in entries]
     else:
         names = [entry.get("name") or entry.get("symbol") for entry in entries]
+
     max_len = max(len(n) for n in names) if names else 10
 
     for entry in entries:
@@ -62,8 +71,10 @@ def _print_section(title: str, color_name: str, entries: list, is_tool: bool = F
             bold_prefix=True,
             pad_prefix=True,
         )
+
         for line in lines:
-            print(line)
+            print_formatted_text(ANSI(line))
+
     print()
 
 
@@ -80,7 +91,16 @@ def handle_help(arg: str = ""):
         _print_section("TOOLS", "cyan", list(tools.items()), is_tool=True)
         _print_section("OPERATORS", "yellow", operators)
         draw_line("-", "white", width=width)
-        print(color("  Type 'help <command|tool|operator>' for detailed syntax and examples.", "cyan"))
+
+        print_formatted_text(
+            ANSI(
+                color(
+                    "  Type 'help <command|tool|operator>' for detailed syntax and examples.",
+                    "cyan",
+                )
+            )
+        )
+
         draw_line("-", "white", width=width)
         return
 
@@ -104,32 +124,38 @@ def handle_help(arg: str = ""):
 def _show_detailed_help(name: str, data: dict, color_name: str, category: str):
     """Render detailed help view with wrapped paragraphs and consistent indentation."""
     width = get_terminal_width()
+
     draw_line("-", color_name, width=width)
-    print(color(f"  {category}: {name}", color_name, bold=True))
+    print_formatted_text(
+        ANSI(color(f"  {category}: {name}", color_name, bold=True))
+    )
     draw_line("-", color_name, width=width)
     print()
 
+    # description
     desc = data.get("details") or data.get("description") or data.get("summary", "")
     if desc:
         for line in indent_wrap(desc, indent=2, text_color="white"):
-            print(line)
+            print_formatted_text(ANSI(line))
         print()
 
     # usage
     usage = _format_usage(name, data)
-    print(color("  " + usage, "yellow"))
+    print_formatted_text(ANSI(color("  " + usage, "yellow")))
 
     # arguments
     args = data.get("args", {})
     if args:
         print()
-        print(color("  Arguments:", "cyan", bold=True))
+        print_formatted_text(ANSI(color("  Arguments:", "cyan", bold=True)))
+
         if isinstance(args, dict):
             for arg_name, meta in args.items():
                 t = meta.get("type", "string")
                 req = "required" if meta.get("required") else "optional"
                 desc_text = meta.get("description", meta.get("desc", ""))
                 arg_prefix = f"- {arg_name} ({t}, {req})"
+
                 for line in indent_wrap(
                     text=desc_text,
                     indent=4,
@@ -138,28 +164,29 @@ def _show_detailed_help(name: str, data: dict, color_name: str, category: str):
                     text_color="white",
                     bold_prefix=False,
                 ):
-                    print(line)
+                    print_formatted_text(ANSI(line))
+
         elif isinstance(args, list):
             for a in args:
-                print(color(f"    - {a}", "green"))
+                print_formatted_text(ANSI(color(f"    - {a}", "green")))
 
     # behavior
     behavior = data.get("behavior", {})
     if behavior:
         print()
-        print(color("  Behavior:", "cyan", bold=True))
+        print_formatted_text(ANSI(color("  Behavior:", "cyan", bold=True)))
         for k, v in behavior.items():
             for line in indent_wrap(f"{k}: {v}", indent=4, text_color="white"):
-                print(line)
+                print_formatted_text(ANSI(line))
 
     # examples
     examples = data.get("syntax_examples", data.get("usage_examples", []))
     if examples:
         print()
-        print(color("  Examples:", "cyan", bold=True))
+        print_formatted_text(ANSI(color("  Examples:", "cyan", bold=True)))
         for ex in examples:
             for line in indent_wrap(ex, indent=4, text_color="white"):
-                print(line)
+                print_formatted_text(ANSI(line))
 
     print()
     draw_line("-", color_name, width=width)
