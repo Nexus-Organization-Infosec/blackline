@@ -1,0 +1,8 @@
+{
+  "nmap": {
+    "action": "recon",
+    "targets": ["ip", "domain"],
+    "supports": ["ports", "stealth", "intensity", "discovery"],
+    "priority": 50
+  }
+}
