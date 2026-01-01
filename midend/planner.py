@@ -1,55 +1,137 @@
+# blackline/midend/planner.py
+#
+# Semantic planner.
+# Converts parsed intent into executable Tasks.
+
 import uuid
+from typing import Dict, List
 
 from config.config_loader import load_config
 
 
-def plan_intent(intent: dict) -> list:
+DEFAULTS_PATH = "midend/defaults.json"
+ACTION_PATH_TEMPLATE = "midend/{action}.json"
+
+
+def plan_intent(intent: Dict) -> List[Dict]:
+    """
+    Convert parsed intent into a list of semantic Tasks.
+
+    Input:
+        {
+            "action": "recon",
+            "entities": {...},
+            "operators": [...]
+        }
+
+    Output:
+        [
+            {
+                "task_id": "...",
+                "action": "...",
+                "target": {...},
+                "intent": {...},
+                "execution": {...}
+            }
+        ]
+    """
     action = intent.get("action")
     if not action:
         return []
 
-    if action == "recon":
-        return _plan_recon(intent)
-
-    return []
-
-
-def _plan_recon(intent: dict) -> list:
-    tasks = []
-
     entities = intent.get("entities", {})
-    operators = intent.get("operators", [])
+    operators = _normalize_operators(intent.get("operators", []))
 
-    # execution hints from operators
-    background = any(op.get("symbol") == "&" for op in operators)
+    # Load action definition 
+    action_def = load_config(ACTION_PATH_TEMPLATE.format(action=action))
+    if not action_def:
+        return []
 
-    # load midend configuration
-    recon_cfg = load_config("midend/recon.json") or {}
-    mappings = load_config("midend/mappings.json") or {}
-    defaults = load_config("midend/defaults.json") or {}
+    # Load semantic defaults for this action
+    defaults = load_config(DEFAULTS_PATH).get(action, {})
 
-    tool_map = mappings.get("recon", {})
-    default_opts = defaults.get("recon", {})
+    supported_entities = action_def.get("supported_entities", [])
+    supported_intent = action_def.get("supported_intent", [])
 
-    for entity_type, values in entities.items():
-        tools = tool_map.get(entity_type, [])
+    targets = _resolve_targets(entities, supported_entities)
+    if not targets:
+        return []
 
-        for value in values:
-            for tool in tools:
-                task = {
-                    "task_id": str(uuid.uuid4()),
-                    "task_type": "recon",
-                    "tool": tool,
-                    "target": {
-                        "type": entity_type,
-                        "value": value
-                    },
-                    "options": default_opts.get(tool, {}).copy(),
-                    "execution": {
-                        "background": background
-                    }
-                }
-
-                tasks.append(task)
+    tasks = []
+    for target in targets:
+        task = _build_task(
+            action=action,
+            target=target,
+            entities=entities,
+            defaults=defaults,
+            supported_intent=supported_intent,
+            operators=operators,
+        )
+        tasks.append(task)
 
     return tasks
+
+
+def _build_task(
+    action: str,
+    target: Dict,
+    entities: Dict,
+    defaults: Dict,
+    supported_intent: List[str],
+    operators: Dict,
+) -> Dict:
+    """Build a single semantic Task."""
+    intent_data = {}
+
+    for key in supported_intent:
+        if key in entities and entities[key]:
+            intent_data[key] = entities[key][0]
+        elif key in defaults:
+            intent_data[key] = defaults[key]
+
+    return {
+        "task_id": str(uuid.uuid4()),
+        "action": action,
+        "target": target,
+        "intent": intent_data,
+        "execution": {
+            "background": operators.get("background", False)
+        },
+    }
+
+
+def _resolve_targets(entities: Dict, supported_entities: List[str]) -> List[Dict]:
+    """
+    Normalize entity targets into a canonical form:
+    {
+        "type": "...",
+        "value": "..."
+    }
+    """
+    targets = []
+
+    for entity_type in supported_entities:
+        values = entities.get(entity_type, [])
+        for value in values:
+            targets.append({
+                "type": entity_type,
+                "value": value
+            })
+
+    return targets
+
+
+def _normalize_operators(operators) -> Dict[str, bool]:
+    """Normalize operators into a simple boolean map."""
+    normalized = {}
+
+    if isinstance(operators, list):
+        for op in operators:
+            name = op.get("name")
+            if name:
+                normalized[name] = True
+
+    elif isinstance(operators, dict):
+        normalized = operators
+
+    return normalized
