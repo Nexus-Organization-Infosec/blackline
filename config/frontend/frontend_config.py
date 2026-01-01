@@ -85,6 +85,14 @@ def get_operators() -> List[Dict[str, Any]]:
     ops = _get_operators()
     return ops.get("operators", []) if isinstance(ops, dict) else []
 
+def get_operator_symbols() -> List[str]:
+    ops = get_operators()
+    symbols = [
+        op.get("symbol")
+        for op in ops
+        if isinstance(op, dict) and "symbol" in op
+    ]
+    return sorted(symbols, key=len, reverse=True)
 
 def get_tools() -> Dict[str, Any]:
     """Return dictionary of all tool definitions (recon, exploit, etc.)."""
