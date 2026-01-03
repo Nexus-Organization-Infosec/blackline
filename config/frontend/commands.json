@@ -1,0 +1,54 @@
+{
+  "commands": {
+    "clear": {
+      "description": "Clear the screen"
+    },
+    "version": {
+      "description": "Show version information"
+    },
+    "help": {
+      "description": "Show help",
+      "args": ["command"]
+    },
+    "history": {
+      "description": "Command history",
+      "subcommands": {
+        "last": {
+          "args": ["N"]
+        },
+        "all": {},
+        "restore": {
+          "args": ["N"]
+        },
+        "clear": {}
+      }
+    },
+    "debug": {
+      "description": "Toggle debug mode",
+      "args": ["on", "off"]
+    },
+    "exit": {},
+    "quit": {}
+  },
+
+  "actions": {
+    "recon": {
+      "description": "Reconnaissance",
+      "keys": {
+        "ip": {},
+        "url": {},
+        "domain": {},
+        "ports": {},
+        "stealth": {
+          "range": [1, 5]
+        },
+        "intensity": {
+          "range": [0, 5]
+        },
+        "discovery": {
+          "values": ["auto", "force", "skip"]
+        }
+      }
+    }
+  }
+}
