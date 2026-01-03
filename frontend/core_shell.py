@@ -1,104 +1,77 @@
-import cmd
-import readline
-import shlex
+from __future__ import annotations
 
-from utils.colors import color
 from utils.display import print_info, print_warning, print_error
+from utils.shell.state import ShellState
+from utils.shell.session import ShellSession
+from utils.shell.prompt import get_prompt
+from utils.shell.dispatcher import ShellDispatcher
+from utils.shell.history import History
 
 from frontend.commands.utils.clear_cmd import handle_clear
 from frontend.commands.utils.version_cmd import handle_version
 from frontend.commands.utils.help_cmd import handle_help
-from frontend.commands.utils.history_cmd import handle_history, record_history
+from frontend.commands.utils.debug_cmd import handle_debug
 
 from frontend.parser.intent_parser import parse_intent
 from midend.api import submit_intent
 from backend.runner import run_task
 
 
-class BLShell(cmd.Cmd):
-    base_prompt = color("blackline ", "turquoise", bold=True) + color("❯ ", "yellow", bold=True)
-    intro = color("Type 'help' to get started.\n", "cyan")
-
+class BLShell:
     def __init__(self):
-        super().__init__()
-        self.cfg = {}
+        self.state = ShellState()
+        self.history = History()
 
-    @property
-    def prompt(self):
-        return self.base_prompt
+        self.prompt = get_prompt()
+        self.dispatcher = ShellDispatcher(self)
+        self.session = ShellSession(
+            shell=self,
+            history=self.history,
+            prompt=self.prompt,
+        )
 
-    def do_clear(self, _):
+    def run(self):
+        print_info("Type 'help' to get started. \n")
+        self.session.run()
+
+    def do_clear(self, _arg: str = ""):
         handle_clear()
 
-    def do_version(self, _):
+    def do_version(self, _arg: str = ""):
         handle_version()
 
-    def do_help(self, arg):
+    def do_help(self, arg: str = ""):
         handle_help(arg)
 
-    def do_history(self, arg):
-        handle_history(self.cfg, arg)
+    def do_history(self, arg: str = ""):
+        return self.history.handle(arg)
 
-    def do_exit(self, _):
+    def do_debug(self, arg: str = ""):
+        handle_debug(self.state, arg)
+
+    def do_exit(self, _arg: str = ""):
         print_info("Goodbye.")
         return True
 
-    def do_quit(self, _):
-        return self.do_exit(_)
+    def do_quit(self, _arg: str = ""):
+        return self.do_exit()
+    
+    def run_action(self, line: str):
+        intent = parse_intent(line)
+        tasks = submit_intent(intent)
 
-
-    def emptyline(self):
-        pass
-
-    def default(self, line):
-        if not line.strip():
+        if not tasks:
+            print_warning("No tasks generated.")
             return
 
-        try:
-            intent = parse_intent(line)
-            result = submit_intent(intent)
+        for task in tasks:
+            result = run_task(task)
 
-            if result.get("status") != "ok":
-                print_error(result)
-                return
+            if result.get("stdout"):
+                print(result["stdout"], end="")
 
-            tasks = result.get("tasks", [])
-            if not tasks:
-                print_warning("No tasks generated.")
-                return
+            if result.get("stderr"):
+                print_error(result["stderr"])
 
-            for task in tasks:
-                output = run_task(task)
-                print_info("[execution]")
-                print(output)
-
-        except Exception as e:
-            print_error(f"Command error: {e}")
-
-    def onecmd(self, line):
-        raw = (line or "").strip()
-        if not raw:
-            return super().onecmd(line)
-
-        print()
-        try:
-            result = super().onecmd(raw)
-            success = True
-        except Exception as e:
-            print_error(f"[✗] Unexpected error: {e}")
-            success = False
-            result = False
-
-        record_history(raw, success=success)
-
-        if result is not True:
-            print()
-
-        return result
-
-    def cmdloop(self, intro=None):
-        try:
-            super().cmdloop(intro or self.intro)
-        except KeyboardInterrupt:
-            print_warning("\n[CTRL+C] Interrupted. Type 'exit' or 'quit' to quit.")
-            self.cmdloop()
+            if self.state.debug and result.get("data"):
+                print(result["data"])
