@@ -5,7 +5,7 @@ import traceback
 
 from frontend.core_shell import BLShell 
 from frontend.ui_elements import show_banner, show_hacker_consent, show_welcome_message
-from utils.display import print_error, print_step, print_info
+from utils.display import print_error, print_info
 
 def main() -> int:
     try:
@@ -15,7 +15,7 @@ def main() -> int:
 
         shell = BLShell()
         try:
-            shell.cmdloop()
+            shell.run()
         except KeyboardInterrupt:
             print_info("\n[!] Keyboard interrupt received. Exiting shell.")
             return 0
