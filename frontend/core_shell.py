@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from utils.display import print_info, print_warning, print_error
+from utils.display import print_info, print_warning
 from utils.shell.state import ShellState
 from utils.shell.session import ShellSession
 from utils.shell.prompt import get_prompt
@@ -14,7 +14,6 @@ from frontend.commands.utils.debug_cmd import handle_debug
 
 from frontend.parser.intent_parser import parse_intent
 from midend.api import submit_intent
-from backend.runner import run_task
 
 
 class BLShell:
@@ -58,15 +57,13 @@ class BLShell:
     
     def run_action(self, line: str):
         intent = parse_intent(line)
-        tasks = submit_intent(intent)
+        results = submit_intent(intent)
 
-        if not tasks:
-            print_warning("No tasks generated.")
+        if not results:
+            print_warning("No results.")
             return
 
-        for task in tasks:
-            result = run_task(task)
-
+        for result in results:
             if result.get("stdout"):
                 print(result["stdout"], end="")
 

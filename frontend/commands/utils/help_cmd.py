@@ -1,5 +1,3 @@
-import textwrap
-
 from config.frontend.frontend_config import (
     get_utils_commands,
     get_tools,
@@ -7,7 +5,6 @@ from config.frontend.frontend_config import (
 )
 
 from utils.display import (
-    print_info,
     print_error,
     get_terminal_width,
     indent_wrap,

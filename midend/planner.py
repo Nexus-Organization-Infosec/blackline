@@ -71,6 +71,41 @@ def plan_intent(intent: Dict) -> List[Dict]:
 
     return tasks
 
+def plan_followups(task: Dict, result: Dict) -> List[Dict]:
+    action = task.get("action")
+    if action != "recon":
+        return []
+
+    action_def = load_config(f"midend/{action}.json")
+    if not action_def:
+        return []
+
+    follow_rules = action_def.get("followups", {}).get("by_service", {})
+
+    services = result.get("data", {}).get("services", {})
+    if not services:
+        return []
+
+    followups = []
+
+    for port, service in services.items():
+        tools = follow_rules.get(service, [])
+        for tool in tools:
+            followups.append({
+                "task_id": str(uuid.uuid4()),
+                "action": tool,  
+                "target": task["target"],  
+                "intent": {
+                    "protocol": "https" if service == "https" else "http"
+                },
+                "execution": {
+                    "background": False
+                }
+            })
+
+    return followups
+
+
 
 def _build_task(
     action: str,

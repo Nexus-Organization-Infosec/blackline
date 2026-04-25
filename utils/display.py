@@ -1,6 +1,5 @@
 # utils/display.py 
 import shutil
-import os
 import textwrap
 
 from .colors import color
@@ -180,3 +179,11 @@ def print_step(msg: str):
 
 def print_error(msg: str):
     print_formatted_text(ANSI(color(f"[✗] {msg}", "red", bold=True)))
+
+def print_debug(message: str, task: dict | None = None):
+    if not task:
+        return
+
+    if task.get("execution", {}).get("debug"):
+        formatted = f"{color('[DEBUG]', 'red')} {message}"
+        print_formatted_text(ANSI(formatted))

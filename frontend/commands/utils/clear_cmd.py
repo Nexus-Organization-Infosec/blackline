@@ -1,7 +1,6 @@
 # frontend/commands/utils/clear_cmd.py 
  
 import os
-import platform 
 from utils.display import print_error
 
 def handle_clear():

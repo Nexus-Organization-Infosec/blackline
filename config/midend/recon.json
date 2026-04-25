@@ -1,5 +1,12 @@
 {
   "action": "recon",
   "supported_entities": ["ip", "url", "domain"],
-  "supported_intent": ["ports", "stealth", "intensity", "discovery"]
+  "supported_intent": ["ports", "stealth", "intensity", "discovery"],
+
+  "followups": {
+    "by_service": {
+      "http": ["curl_probe"],
+      "https": ["curl_probe"]
+    }
+  }
 }

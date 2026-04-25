@@ -11,6 +11,7 @@ from typing import Any, Dict, List
 from backend.utils.exec import run_command
 from backend.recon.nmap_parser import parse_nmap_output
 from config.config_loader import load_config
+from utils.display import print_debug
 
 
 NMAP_CONFIG_PATH = "backend/recon/nmap.json"
@@ -51,7 +52,7 @@ def run(task: Dict[str, Any]) -> Dict[str, Any]:
 
     cmd = _build_cmd(target_value=target_value, intent=intent, cfg=cfg)
 
-    print("[debug] nmap cmd:", cmd)
+    print_debug(f"nmap cmd: {cmd}", task)
 
     exec_result = run_command(
         cmd=cmd,

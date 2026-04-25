@@ -1,6 +1,3 @@
-from utils.display import print_error
-
-
 class ShellDispatcher:
     """Decides whether input is a shell command or an action """
 

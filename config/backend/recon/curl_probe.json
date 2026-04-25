@@ -1,0 +1,5 @@
+{
+  "binary": "curl",
+  "timeout": 10,
+  "default_args": ["-s", "-k", "-I"]
+}

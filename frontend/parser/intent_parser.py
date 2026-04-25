@@ -3,7 +3,7 @@
 import re
 from typing import Dict, Any
 
-from config.frontend.frontend_config import get_operator_symbols
+from config.frontend.frontend_config import get_operators
 from frontend.parser.recon_parser import parse_recon_entities
 
 
@@ -25,13 +25,15 @@ def parse_intent(line: str) -> Dict[str, Any]:
         intent["errors"].append("Empty command")
         return intent
 
-    operator_symbols = get_operator_symbols()
+    operators = _get_operator_definitions()
     remaining = text
 
-    for symbol in operator_symbols:
+    for operator in operators:
+        symbol = operator["symbol"]
         while symbol in remaining:
             intent["operators"].append({
-                "symbol": symbol
+                "symbol": symbol,
+                "name": operator["name"],
             })
             remaining = remaining.replace(symbol, " ", 1)
 
@@ -51,3 +53,23 @@ def parse_intent(line: str) -> Dict[str, Any]:
         intent["errors"].extend(errors)
 
     return intent
+
+
+def _get_operator_definitions() -> list[dict[str, str]]:
+    """Return operators in longest-symbol-first order for deterministic parsing."""
+    definitions: list[dict[str, str]] = []
+
+    for operator in get_operators():
+        if not isinstance(operator, dict):
+            continue
+
+        symbol = operator.get("symbol")
+        if not symbol:
+            continue
+
+        definitions.append({
+            "symbol": str(symbol),
+            "name": str(operator.get("name") or symbol),
+        })
+
+    return sorted(definitions, key=lambda op: len(op["symbol"]), reverse=True)
