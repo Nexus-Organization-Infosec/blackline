@@ -1,0 +1,39 @@
+{
+  "items": [
+    {
+      "symbol": "&",
+      "name": "and-sequence",
+      "description": "run next if success"
+    },
+    {
+      "symbol": "|",
+      "name": "pipe-structured",
+      "description": "pass structured output"
+    },
+    {
+      "symbol": ">",
+      "name": "stream-to",
+      "description": "stdout → stdin"
+    },
+    {
+      "symbol": "+",
+      "name": "append-link",
+      "description": "append outputs"
+    },
+    {
+      "symbol": "?",
+      "name": "conditional",
+      "description": "conditional execution"
+    },
+    {
+      "symbol": "||",
+      "name": "or-sequence",
+      "description": "run if failed"
+    },
+    {
+      "symbol": "//",
+      "name": "parallel",
+      "description": "run concurrently"
+    }
+  ]
+}

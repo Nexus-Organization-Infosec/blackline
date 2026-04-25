@@ -1,0 +1,73 @@
+{
+  "tools": {
+    "recon": {
+      "engine": {
+        "runner": "nmap"
+      },
+      "arguments": {
+        "target": {
+          "description": "target ip or domain"
+        },
+        "ports": {
+          "description": "port range like 22,80,443 or 1-1024"
+        },
+        "top_ports": {
+          "description": "scan the top N common ports"
+        },
+        "strategy": {
+          "description": "recon strategy",
+          "choices": ["balanced", "quiet", "fast", "deep", "udp"]
+        },
+        "speed": {
+          "description": "execution speed",
+          "choices": ["low", "normal", "high", "aggressive"]
+        },
+        "probe": {
+          "description": "how deep to fingerprint services",
+          "choices": ["surface", "service", "script", "fingerprint"]
+        },
+        "transport": {
+          "description": "network transport focus",
+          "choices": ["tcp", "udp"]
+        }
+      }
+    },
+    "nmap": {
+      "binary": "nmap",
+      "defaults": {
+        "profile": "default",
+        "ports": "1-1024",
+        "timing": "T3",
+        "skip_host_discovery": true
+      },
+      "profiles": {
+        "default": {
+          "flags": ["-Pn", "-T3"]
+        },
+        "stealth": {
+          "flags": ["-Pn", "-sS", "-T2", "--max-retries", "2"]
+        },
+        "service": {
+          "flags": ["-Pn", "-T3", "-sV"]
+        },
+        "aggressive": {
+          "flags": ["-Pn", "-T4", "-A"]
+        },
+        "udp": {
+          "flags": ["-Pn", "-sU", "-T3"]
+        }
+      },
+      "options": {
+        "service_detection": {
+          "flags": ["-sV"]
+        },
+        "scripts": {
+          "flags": ["-sC"]
+        },
+        "os_detection": {
+          "flags": ["-O"]
+        }
+      }
+    }
+  }
+}

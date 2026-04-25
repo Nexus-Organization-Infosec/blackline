@@ -1,8 +1,0 @@
-{
-  "recon": {
-    "ports": "top1000",
-    "stealth": 3,
-    "intensity": 0,
-    "discovery": "auto"
-  }
-}

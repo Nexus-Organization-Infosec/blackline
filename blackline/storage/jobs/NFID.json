@@ -1,0 +1,282 @@
+{
+  "id": "NFID",
+  "module": "recon",
+  "params": {
+    "target": "10.0.0.1",
+    "strategy": "balanced",
+    "speed": "normal",
+    "probe": "surface"
+  },
+  "created": "2026-04-25 00:33",
+  "status": "initialized",
+  "results": [
+    {
+      "recorded_at": "2026-04-25T00:37:35",
+      "module": "recon",
+      "tool": "nmap",
+      "action": "scan",
+      "ok": true,
+      "error": "",
+      "summary": {
+        "target": "10.0.0.1",
+        "host_status": "up",
+        "open_ports": 3,
+        "elapsed_seconds": 224.3018455420388
+      },
+      "payload": {
+        "command": [
+          "nmap",
+          "-Pn",
+          "-T3",
+          "-p",
+          "1-1024",
+          "10.0.0.1"
+        ],
+        "target": "10.0.0.1",
+        "host_status": "up",
+        "raw_output": "Starting Nmap 7.99 ( https://nmap.org ) at 2026-04-25 00:33 -0400\nNmap scan report for 10.0.0.1\nHost is up (1.0s latency).\nNot shown: 1018 closed tcp ports (conn-refused)\nPORT    STATE    SERVICE\n22/tcp  filtered ssh\n23/tcp  filtered telnet\n53/tcp  open     domain\n80/tcp  open     http\n111/tcp filtered rpcbind\n443/tcp open     https\n\nNmap done: 1 IP address (1 host up) scanned in 224.28 seconds\n",
+        "ports": [
+          {
+            "port": 22,
+            "protocol": "tcp",
+            "state": "filtered",
+            "service": "ssh"
+          },
+          {
+            "port": 23,
+            "protocol": "tcp",
+            "state": "filtered",
+            "service": "telnet"
+          },
+          {
+            "port": 53,
+            "protocol": "tcp",
+            "state": "open",
+            "service": "domain"
+          },
+          {
+            "port": 80,
+            "protocol": "tcp",
+            "state": "open",
+            "service": "http"
+          },
+          {
+            "port": 111,
+            "protocol": "tcp",
+            "state": "filtered",
+            "service": "rpcbind"
+          },
+          {
+            "port": 443,
+            "protocol": "tcp",
+            "state": "open",
+            "service": "https"
+          }
+        ],
+        "warnings": [],
+        "elapsed_seconds": 224.3018455420388
+      }
+    },
+    {
+      "recorded_at": "2026-04-25T00:45:10",
+      "module": "recon",
+      "tool": "nmap",
+      "action": "scan",
+      "ok": true,
+      "error": "",
+      "summary": {
+        "target": "10.0.0.1",
+        "host_status": "up",
+        "open_ports": 3,
+        "elapsed_seconds": 224.28
+      },
+      "payload": {
+        "command": [
+          "nmap",
+          "-Pn",
+          "-T3",
+          "-p",
+          "1-1024",
+          "10.0.0.1"
+        ],
+        "target": "10.0.0.1",
+        "host_status": "up",
+        "elapsed_seconds": 224.28,
+        "raw_output": "Starting Nmap 7.99 ( https://nmap.org ) at 2026-04-25 00:33 -0400\nNmap scan report for 10.0.0.1\nHost is up (1.0s latency).\nPORT    STATE    SERVICE\n22/tcp  filtered ssh\n23/tcp  filtered telnet\n53/tcp  open     domain\n80/tcp  open     http\n111/tcp filtered rpcbind\n443/tcp open     https\n",
+        "ports": [
+          {
+            "port": 22,
+            "protocol": "tcp",
+            "state": "filtered",
+            "service": "ssh"
+          },
+          {
+            "port": 23,
+            "protocol": "tcp",
+            "state": "filtered",
+            "service": "telnet"
+          },
+          {
+            "port": 53,
+            "protocol": "tcp",
+            "state": "open",
+            "service": "domain"
+          },
+          {
+            "port": 80,
+            "protocol": "tcp",
+            "state": "open",
+            "service": "http"
+          },
+          {
+            "port": 111,
+            "protocol": "tcp",
+            "state": "filtered",
+            "service": "rpcbind"
+          },
+          {
+            "port": 443,
+            "protocol": "tcp",
+            "state": "open",
+            "service": "https"
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "recorded_at": "2026-04-25T00:45:10",
+      "module": "recon",
+      "tool": "nmap",
+      "action": "scan",
+      "ok": true,
+      "error": "",
+      "summary": {
+        "target": "10.0.0.1",
+        "host_status": "up",
+        "open_ports": 3,
+        "elapsed_seconds": 224.28
+      },
+      "payload": {
+        "command": [
+          "nmap",
+          "-Pn",
+          "-T3",
+          "-p",
+          "1-1024",
+          "10.0.0.1"
+        ],
+        "target": "10.0.0.1",
+        "host_status": "up",
+        "elapsed_seconds": 224.28,
+        "raw_output": "Starting Nmap 7.99 ( https://nmap.org ) at 2026-04-25 00:33 -0400\nNmap scan report for 10.0.0.1\nHost is up (1.0s latency).\nPORT    STATE    SERVICE\n22/tcp  filtered ssh\n23/tcp  filtered telnet\n53/tcp  open     domain\n80/tcp  open     http\n111/tcp filtered rpcbind\n443/tcp open     https\n",
+        "ports": [
+          {
+            "port": 22,
+            "protocol": "tcp",
+            "state": "filtered",
+            "service": "ssh"
+          },
+          {
+            "port": 23,
+            "protocol": "tcp",
+            "state": "filtered",
+            "service": "telnet"
+          },
+          {
+            "port": 53,
+            "protocol": "tcp",
+            "state": "open",
+            "service": "domain"
+          },
+          {
+            "port": 80,
+            "protocol": "tcp",
+            "state": "open",
+            "service": "http"
+          },
+          {
+            "port": 111,
+            "protocol": "tcp",
+            "state": "filtered",
+            "service": "rpcbind"
+          },
+          {
+            "port": 443,
+            "protocol": "tcp",
+            "state": "open",
+            "service": "https"
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "recorded_at": "2026-04-25T00:52:14",
+      "module": "recon",
+      "tool": "nmap",
+      "action": "scan",
+      "ok": true,
+      "error": "",
+      "summary": {
+        "target": "10.0.0.1",
+        "host_status": "up",
+        "open_ports": 3,
+        "elapsed_seconds": 223.77259737503482
+      },
+      "payload": {
+        "command": [
+          "nmap",
+          "-Pn",
+          "-T3",
+          "-p",
+          "1-1024",
+          "10.0.0.1"
+        ],
+        "target": "10.0.0.1",
+        "host_status": "up",
+        "raw_output": "Starting Nmap 7.99 ( https://nmap.org ) at 2026-04-25 00:48 -0400\nNmap scan report for 10.0.0.1\nHost is up (1.0s latency).\nNot shown: 1018 closed tcp ports (conn-refused)\nPORT    STATE    SERVICE\n22/tcp  filtered ssh\n23/tcp  filtered telnet\n53/tcp  open     domain\n80/tcp  open     http\n111/tcp filtered rpcbind\n443/tcp open     https\n\nNmap done: 1 IP address (1 host up) scanned in 223.75 seconds\n",
+        "ports": [
+          {
+            "port": 22,
+            "protocol": "tcp",
+            "state": "filtered",
+            "service": "ssh"
+          },
+          {
+            "port": 23,
+            "protocol": "tcp",
+            "state": "filtered",
+            "service": "telnet"
+          },
+          {
+            "port": 53,
+            "protocol": "tcp",
+            "state": "open",
+            "service": "domain"
+          },
+          {
+            "port": 80,
+            "protocol": "tcp",
+            "state": "open",
+            "service": "http"
+          },
+          {
+            "port": 111,
+            "protocol": "tcp",
+            "state": "filtered",
+            "service": "rpcbind"
+          },
+          {
+            "port": 443,
+            "protocol": "tcp",
+            "state": "open",
+            "service": "https"
+          }
+        ],
+        "warnings": [],
+        "elapsed_seconds": 223.77259737503482
+      }
+    }
+  ]
+}

@@ -1,0 +1,193 @@
+{
+  "groups": [
+    {
+      "id": "utils",
+      "title": "UTILS",
+      "items": [
+        {
+          "name": "new",
+          "description": "create and enter a tracked job context",
+          "usage": "new [module[key=value,...]]",
+          "long_description": "create a manual tracked job context and enter it without running anything yet",
+          "arguments": [
+            ["module", "tool module to configure"],
+            ["params", "optional key=value parameters for the job"]
+          ],
+          "examples": [
+            "new",
+            "new recon[target=192.168.1.1]",
+            "new recon[target=example.com,ports=80-443]"
+          ]
+        },
+        {
+          "name": "run",
+          "description": "execute current module or command",
+          "usage": "run <command>",
+          "arguments": [],
+          "examples": ["run recon[target=192.168.1.1]"]
+        },
+        {
+          "name": "use",
+          "description": "load module(s) temporarily",
+          "usage": "use <module>",
+          "arguments": [["module", "module name or path"]],
+          "examples": ["use recon"]
+        },
+        {
+          "name": "load",
+          "description": "persist module into session",
+          "usage": "load <module>",
+          "arguments": [["module", "module name or path"]],
+          "examples": ["load recon"]
+        },
+        {
+          "name": "list",
+          "description": "list items in current context",
+          "usage": "list [context]",
+          "arguments": [["context", "optional context to inspect"]],
+          "examples": ["list tools"]
+        },
+        {
+          "name": "edit",
+          "description": "open module in editor",
+          "usage": "edit <module>",
+          "arguments": [["module", "module name or path"]],
+          "examples": ["edit recon"]
+        },
+        {
+          "name": "delete",
+          "description": "remove job or resource",
+          "usage": "delete #ID[, #ID] | delete *",
+          "arguments": [["id", "job identifier"]],
+          "examples": ["delete #A12F", "delete #A12F, #B93K", "delete *"]
+        },
+        {
+          "name": "reset",
+          "description": "reset environment",
+          "usage": "reset [scope]",
+          "arguments": [["scope", "optional scope to reset"]],
+          "examples": ["reset session"]
+        },
+        {
+          "name": "clear",
+          "description": "clear terminal",
+          "usage": "clear",
+          "arguments": [],
+          "examples": ["clear"]
+        },
+        {
+          "name": "update",
+          "description": "update components",
+          "usage": "update [component]",
+          "arguments": [["component", "optional component name"]],
+          "examples": ["update tools"]
+        },
+        {
+          "name": "history",
+          "description": "view execution history",
+          "usage": "history [all|clear]",
+          "arguments": [
+            ["all", "show full history including filtered commands"],
+            ["clear", "clear stored history"]
+          ],
+          "examples": ["history", "history all", "history clear"]
+        },
+        {
+          "name": "show",
+          "description": "show current job or a specific job",
+          "usage": "show [#ID]",
+          "arguments": [["id", "optional job identifier"]],
+          "examples": ["show", "show #A12F"]
+        },
+        {
+          "name": "jobs",
+          "description": "list all jobs",
+          "usage": "jobs",
+          "arguments": [],
+          "examples": ["jobs"]
+        },
+        {
+          "name": "enter",
+          "description": "switch into a job context",
+          "usage": "enter #ID",
+          "arguments": [["id", "job identifier"]],
+          "examples": ["enter #A12F"]
+        },
+        {
+          "name": "network",
+          "description": "show local and external network identity",
+          "usage": "network",
+          "arguments": [],
+          "examples": ["network"]
+        },
+        {
+          "name": "version",
+          "description": "show version info",
+          "usage": "version",
+          "arguments": [],
+          "examples": ["version"]
+        },
+        {
+          "name": "help",
+          "description": "show help",
+          "usage": "help [command|category]",
+          "arguments": [["command", "optional command or category name"]],
+          "examples": ["help", "help recon", "help operators"]
+        },
+        {
+          "name": "exit",
+          "description": "leave job or exit shell",
+          "usage": "exit",
+          "arguments": [],
+          "examples": ["exit"]
+        }
+      ]
+    },
+    {
+      "id": "tools",
+      "title": "TOOLS",
+      "items": [
+        {
+          "name": "recon",
+          "description": "target discovery (ip, url, email, etc.)",
+          "usage": "recon[target=<ip>,strategy=<mode>,probe=<depth>]",
+          "long_description": "perform reconnaissance on a target",
+          "arguments": [
+            ["target", "target ip or domain"],
+            ["strategy", "balanced, quiet, fast, deep, or udp"],
+            ["probe", "surface, service, script, or fingerprint"]
+          ],
+          "examples": [
+            "recon[target=192.168.1.1]",
+            "recon[target=example.com,strategy=quiet,top_ports=20]",
+            "recon[target=192.168.1.1,probe=fingerprint,speed=high]"
+          ]
+        },
+        {
+          "name": "find_exploit",
+          "description": "search exploit database",
+          "usage": "find_exploit[target=<service>]",
+          "arguments": [["target", "service, product, or CVE to search"]],
+          "examples": ["find_exploit[target=openssh]"]
+        },
+        {
+          "name": "exploit",
+          "description": "execute exploit",
+          "usage": "exploit[id=<id>,target=<host>]",
+          "arguments": [
+            ["id", "exploit identifier"],
+            ["target", "authorized target host"]
+          ],
+          "examples": ["exploit[id=demo,target=192.168.1.1]"]
+        },
+        {
+          "name": "clean_up",
+          "description": "remove artifacts",
+          "usage": "clean_up [scope]",
+          "arguments": [["scope", "optional cleanup scope"]],
+          "examples": ["clean_up session"]
+        }
+      ]
+    }
+  ]
+}

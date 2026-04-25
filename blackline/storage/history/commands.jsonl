@@ -1,0 +1,179 @@
+{"command": "exit", "created": "2026-04-24T02:20:34"}
+{"command": "run recon", "created": "2026-04-24T02:20:34"}
+{"command": "version", "created": "2026-04-24T02:20:34"}
+{"command": "exit", "created": "2026-04-24T02:20:34"}
+{"command": "exit", "created": "2026-04-24T02:21:05"}
+{"command": "exit", "created": "2026-04-24T02:24:13"}
+{"command": "run recon", "created": "2026-04-24T02:24:14"}
+{"command": "version", "created": "2026-04-24T02:24:14"}
+{"command": "exit", "created": "2026-04-24T02:24:14"}
+{"command": "exit", "created": "2026-04-24T02:24:31"}
+{"command": "run recon", "created": "2026-04-24T02:24:31"}
+{"command": "version", "created": "2026-04-24T02:24:31"}
+{"command": "exit", "created": "2026-04-24T02:24:31"}
+{"command": "network", "created": "2026-04-24T02:25:14"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-24T02:25:27"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-24T02:28:08"}
+{"command": "exit", "created": "2026-04-24T02:28:08"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-24T02:28:08"}
+{"command": "run recon", "created": "2026-04-24T02:28:08"}
+{"command": "version", "created": "2026-04-24T02:28:08"}
+{"command": "exit", "created": "2026-04-24T02:28:08"}
+{"command": "exit", "created": "2026-04-24T02:31:30"}
+{"command": "help", "created": "2026-04-24T02:31:33"}
+{"command": "help recon", "created": "2026-04-24T02:31:38"}
+{"command": "help", "created": "2026-04-24T02:33:04"}
+{"command": "help recon", "created": "2026-04-24T02:33:14"}
+{"command": "exit", "created": "2026-04-24T02:34:10"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-24T02:34:10"}
+{"command": "run recon", "created": "2026-04-24T02:34:10"}
+{"command": "version", "created": "2026-04-24T02:34:10"}
+{"command": "exit", "created": "2026-04-24T02:34:10"}
+{"command": "exit", "created": "2026-04-24T02:34:25"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-24T02:34:25"}
+{"command": "run recon", "created": "2026-04-24T02:34:25"}
+{"command": "version", "created": "2026-04-24T02:34:25"}
+{"command": "exit", "created": "2026-04-24T02:34:25"}
+{"command": "recon [target= 10.0.0.1, strategy=", "created": "2026-04-24T02:35:25"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, ports=", "created": "2026-04-24T02:35:43"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface,", "created": "2026-04-24T02:36:36"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface,]", "created": "2026-04-24T02:36:41"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-24T02:36:44"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-24T02:39:25"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-24T02:39:25"}
+{"command": "exit", "created": "2026-04-24T02:39:25"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-24T02:39:25"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-24T02:39:25"}
+{"command": "run recon", "created": "2026-04-24T02:39:25"}
+{"command": "version", "created": "2026-04-24T02:39:25"}
+{"command": "exit", "created": "2026-04-24T02:39:25"}
+{"command": "exit", "created": "2026-04-24T02:40:20"}
+{"command": "help", "created": "2026-04-24T02:40:24"}
+{"command": "exit", "created": "2026-04-24T23:20:40"}
+{"command": "recon [targe= 10.0.0.1, strategy=balanced,", "created": "2026-04-24T23:36:12"}
+{"command": "recon [targe= 10.0.0.1, strategy=balanced, speed=normal, ]", "created": "2026-04-24T23:36:32"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-24T23:39:31"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-24T23:39:31"}
+{"command": "exit", "created": "2026-04-24T23:39:31"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-24T23:39:31"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-24T23:39:31"}
+{"command": "run recon", "created": "2026-04-24T23:39:31"}
+{"command": "version", "created": "2026-04-24T23:39:31"}
+{"command": "exit", "created": "2026-04-24T23:39:31"}
+{"command": "exit", "created": "2026-04-24T23:43:39"}
+{"command": "recon [targe= 10.0.0.1, strategy=balanced, speed=normal, probe=surface]", "created": "2026-04-24T23:43:50"}
+{"command": "recon [targe= 10.0.0.1, strategy=balanced, speed=normal, probe=surface]", "created": "2026-04-24T23:43:54"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal, probe=surface]", "created": "2026-04-24T23:44:00"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-24T23:46:04"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-24T23:46:04"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-24T23:47:16"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-24T23:47:16"}
+{"command": "exit", "created": "2026-04-24T23:47:16"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-24T23:47:16"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-24T23:47:16"}
+{"command": "run recon", "created": "2026-04-24T23:47:16"}
+{"command": "version", "created": "2026-04-24T23:47:16"}
+{"command": "exit", "created": "2026-04-24T23:47:16"}
+{"command": "history", "created": "2026-04-24T23:47:32"}
+{"command": "history 73", "created": "2026-04-24T23:47:39"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-24T23:47:45"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-24T23:51:41"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-24T23:51:41"}
+{"command": "exit", "created": "2026-04-24T23:51:51"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-24T23:51:51"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-24T23:51:51"}
+{"command": "run recon", "created": "2026-04-24T23:51:51"}
+{"command": "version", "created": "2026-04-24T23:51:51"}
+{"command": "exit", "created": "2026-04-24T23:51:51"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-24T23:52:37"}
+{"command": "history", "created": "2026-04-24T23:53:10"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-24T23:53:14"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-24T23:55:45"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-24T23:55:45"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-24T23:55:57"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-24T23:55:57"}
+{"command": "exit", "created": "2026-04-24T23:55:57"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-24T23:55:57"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-24T23:55:57"}
+{"command": "run recon", "created": "2026-04-24T23:55:57"}
+{"command": "version", "created": "2026-04-24T23:55:57"}
+{"command": "exit", "created": "2026-04-24T23:55:57"}
+{"command": "exit", "created": "2026-04-24T23:56:08"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal, probe=surface]", "created": "2026-04-24T23:56:24"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-25T00:01:55"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-25T00:01:55"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-25T00:02:17"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-25T00:02:17"}
+{"command": "exit", "created": "2026-04-25T00:02:17"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-25T00:02:17"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-25T00:02:17"}
+{"command": "run recon", "created": "2026-04-25T00:02:17"}
+{"command": "version", "created": "2026-04-25T00:02:17"}
+{"command": "exit", "created": "2026-04-25T00:02:17"}
+{"command": "exit", "created": "2026-04-25T00:05:18"}
+{"command": "history", "created": "2026-04-25T00:05:27"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-25T00:05:32"}
+{"command": "clear", "created": "2026-04-25T00:09:46"}
+{"command": "recon [targe=10.0.0.1]", "created": "2026-04-25T00:11:10"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-25T00:11:10"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-25T00:11:10"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-25T00:11:10"}
+{"command": "exit", "created": "2026-04-25T00:11:10"}
+{"command": "exit", "created": "2026-04-25T00:11:10"}
+{"command": "recon [targe=10.0.0.1]", "created": "2026-04-25T00:11:10"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-25T00:11:10"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-25T00:11:10"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-25T00:11:10"}
+{"command": "run recon", "created": "2026-04-25T00:11:10"}
+{"command": "version", "created": "2026-04-25T00:11:10"}
+{"command": "exit", "created": "2026-04-25T00:11:10"}
+{"command": "clear", "created": "2026-04-25T00:11:32"}
+{"command": "exit", "created": "2026-04-25T00:11:33"}
+{"command": "recon [target=10.0.0.1, strategy= balanced,  speed= normal, probe= surface,]", "created": "2026-04-25T00:12:16"}
+{"command": "recon [targe=10.0.0.1]", "created": "2026-04-25T00:27:49"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-25T00:27:49"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-25T00:27:49"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-25T00:27:49"}
+{"command": "exit", "created": "2026-04-25T00:27:49"}
+{"command": "recon [targe=10.0.0.1]", "created": "2026-04-25T00:28:39"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-25T00:28:39"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-25T00:28:39"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-25T00:28:39"}
+{"command": "exit", "created": "2026-04-25T00:28:39"}
+{"command": "exit", "created": "2026-04-25T00:28:39"}
+{"command": "recon [targe=10.0.0.1]", "created": "2026-04-25T00:28:39"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-25T00:28:39"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-25T00:28:39"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-25T00:28:39"}
+{"command": "run recon", "created": "2026-04-25T00:28:39"}
+{"command": "version", "created": "2026-04-25T00:28:39"}
+{"command": "exit", "created": "2026-04-25T00:28:39"}
+{"command": "exit", "created": "2026-04-25T00:33:15"}
+{"command": "clear", "created": "2026-04-25T00:33:15"}
+{"command": "exit", "created": "2026-04-25T00:33:16"}
+{"command": "jobs", "created": "2026-04-25T00:33:22"}
+{"command": "delete *", "created": "2026-04-25T00:33:33"}
+{"command": "clear", "created": "2026-04-25T00:33:34"}
+{"command": "history", "created": "2026-04-25T00:33:43"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-25T00:33:50"}
+{"command": "show #NFID", "created": "2026-04-25T00:39:55"}
+{"command": "recon [targe=10.0.0.1]", "created": "2026-04-25T00:45:10"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-25T00:45:10"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-25T00:45:10"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-25T00:45:10"}
+{"command": "exit", "created": "2026-04-25T00:45:10"}
+{"command": "recon [targe=10.0.0.1]", "created": "2026-04-25T00:45:10"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-25T00:45:10"}
+{"command": "recon[target=10.0.0.1]", "created": "2026-04-25T00:45:10"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-25T00:45:10"}
+{"command": "run recon", "created": "2026-04-25T00:45:10"}
+{"command": "version", "created": "2026-04-25T00:45:10"}
+{"command": "exit", "created": "2026-04-25T00:45:10"}
+{"command": "exit", "created": "2026-04-25T00:48:11"}
+{"command": "clear", "created": "2026-04-25T00:48:11"}
+{"command": "exit", "created": "2026-04-25T00:48:12"}
+{"command": "enter #NFIDclear", "created": "2026-04-25T00:48:16"}
+{"command": "enter #NFID", "created": "2026-04-25T00:48:18"}
+{"command": "clear", "created": "2026-04-25T00:48:19"}
+{"command": "history", "created": "2026-04-25T00:48:23"}
+{"command": "recon [target= 10.0.0.1, strategy=balanced, speed=normal,  probe=surface]", "created": "2026-04-25T00:48:30"}
