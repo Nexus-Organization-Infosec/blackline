@@ -82,24 +82,9 @@ def close_elevated_session(state: ShellState, *, use_color: bool | None = None) 
 
 
 def _prompt_password(state: ShellState) -> str | None:
-    session = state.prompt_session
-    if session is not None:
+    if state.prompt_session is not None:
         try:
-            from prompt_toolkit.layout.processors import PasswordProcessor
-
-            return str(
-                session.prompt(
-                    [
-                        ("class:auth.tag", "[sudo]"),
-                        ("class:auth.label", " password: "),
-                    ],
-                    is_password=True,
-                    input_processors=[PasswordProcessor(char="")],
-                    completer=None,
-                    complete_while_typing=False,
-                    lexer=None,
-                )
-            )
+            return _prompt_password_with_prompt_toolkit()
         except KeyboardInterrupt:
             print()
             return None
@@ -112,6 +97,32 @@ def _prompt_password(state: ShellState) -> str | None:
     except (KeyboardInterrupt, EOFError):
         print()
         return None
+
+
+def _prompt_password_with_prompt_toolkit() -> str:
+    """Read a password in an isolated prompt session.
+
+    The main shell session owns completion and syntax-highlighting state. Using
+    it for a hidden password prompt can leave the following interactive prompt
+    in a corrupted redraw state, so authentication always uses a short-lived
+    prompt instead.
+    """
+    from prompt_toolkit import prompt
+    from prompt_toolkit.layout.processors import PasswordProcessor
+
+    return str(
+        prompt(
+            [
+                ("class:auth.tag", "[sudo]"),
+                ("class:auth.label", " password: "),
+            ],
+            is_password=True,
+            input_processors=[PasswordProcessor(char="")],
+            completer=None,
+            complete_while_typing=False,
+            lexer=None,
+        )
+    )
 
 
 def _normalize_auth_error(stderr: str) -> str:

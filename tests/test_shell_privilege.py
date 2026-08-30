@@ -3,8 +3,6 @@ import unittest
 from contextlib import redirect_stdout
 from unittest.mock import patch
 
-from prompt_toolkit.layout.processors import PasswordProcessor
-
 from blackline.cli import auth, core_shell
 from blackline.cli.commands.utils.shell_cmds import ShellState
 from blackline.utils.exec import CommandResult
@@ -27,13 +25,14 @@ class _FakePromptSession:
 
 class ShellPrivilegeTests(unittest.TestCase):
     def test_ensure_elevated_session_authenticates_inline(self):
-        prompt_session = _FakePromptSession(["secret"])
+        prompt_session = _FakePromptSession([])
         state = ShellState(prompt_session=prompt_session)
         output = io.StringIO()
 
-        with patch.object(auth, "run_command", return_value=CommandResult(("sudo", "-S", "-p", "", "-v"), 0, "", "", 0.1)):
-            with redirect_stdout(output):
-                ok = auth.ensure_elevated_session(state, use_color=False)
+        with patch.object(auth, "_prompt_password_with_prompt_toolkit", return_value="secret") as password_prompt:
+            with patch.object(auth, "run_command", return_value=CommandResult(("sudo", "-S", "-p", "", "-v"), 0, "", "", 0.1)):
+                with redirect_stdout(output):
+                    ok = auth.ensure_elevated_session(state, use_color=False)
 
         self.assertTrue(ok)
         self.assertTrue(state.sudo_authenticated)
@@ -46,24 +45,21 @@ class ShellPrivilegeTests(unittest.TestCase):
                 "[auth] session authenticated",
             ],
         )
-        self.assertEqual(len(prompt_session.calls), 1)
-        self.assertTrue(prompt_session.calls[0]["kwargs"]["is_password"])
-        processors = prompt_session.calls[0]["kwargs"]["input_processors"]
-        self.assertEqual(len(processors), 1)
-        self.assertIsInstance(processors[0], PasswordProcessor)
-        self.assertEqual(processors[0].char, "")
+        password_prompt.assert_called_once_with()
+        self.assertEqual(prompt_session.calls, [])
 
     def test_ensure_elevated_session_retries_incorrect_password(self):
-        state = ShellState(prompt_session=_FakePromptSession(["wrong", "secret"]))
+        state = ShellState(prompt_session=_FakePromptSession([]))
         output = io.StringIO()
         responses = [
             CommandResult(("sudo", "-S", "-p", "", "-v"), 1, "", "Sorry, try again.", 0.1),
             CommandResult(("sudo", "-S", "-p", "", "-v"), 0, "", "", 0.1),
         ]
 
-        with patch.object(auth, "run_command", side_effect=responses):
-            with redirect_stdout(output):
-                ok = auth.ensure_elevated_session(state, use_color=False)
+        with patch.object(auth, "_prompt_password_with_prompt_toolkit", side_effect=["wrong", "secret"]):
+            with patch.object(auth, "run_command", side_effect=responses):
+                with redirect_stdout(output):
+                    ok = auth.ensure_elevated_session(state, use_color=False)
 
         self.assertTrue(ok)
         self.assertTrue(state.sudo_authenticated)
