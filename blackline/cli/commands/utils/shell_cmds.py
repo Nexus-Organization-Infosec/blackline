@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from blackline import __version__
 from blackline.cli.ui.display import info, result, warn, write_line
@@ -17,6 +18,9 @@ class ShellState:
     history: list[str] = field(default_factory=list)
     active_job: str = ""
     history_path: Path | None = None
+    prompt_session: Any | None = None
+    sudo_authenticated: bool = False
+    sudo_expires_at: float = 0.0
 
 
 def handle_clear() -> None:
@@ -44,6 +48,8 @@ def handle_history(state: ShellState, *, show_all: bool = False, use_color: bool
 def handle_reset(state: ShellState, *, use_color: bool | None = None) -> None:
     """Reset lightweight shell state."""
     state.history.clear()
+    state.sudo_authenticated = False
+    state.sudo_expires_at = 0.0
     result("session state reset", use_color=use_color)
 
 
