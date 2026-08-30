@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from blackline.engine.executor import StepResult, execute_plan
 from blackline.engine.planner import ExecutionPlan, build_plan
-from blackline.engine.state.context import ExecutionContext
+from blackline.engine.context import ExecutionContext
 
 
 @dataclass(frozen=True, slots=True)
