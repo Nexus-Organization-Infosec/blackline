@@ -7,7 +7,7 @@ requires-python = ">=3.11"
 dependencies = ["prompt_toolkit>=3.0.43"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "pre-commit>=3.7"]
 
 [project.scripts]
 blackline = "blackline.cli.cli:main"
