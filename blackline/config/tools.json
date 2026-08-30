@@ -4,6 +4,14 @@
       "engine": {
         "runner": "nmap"
       },
+      "execution_control": {
+        "timeouts": {
+          "dns_seconds": 15,
+          "ipintel_seconds": 30,
+          "http_seconds": 10,
+          "port_scan_seconds": 0
+        }
+      },
       "arguments": {
         "target": {
           "description": "target ip or domain"
@@ -40,6 +48,12 @@
         "timing": "T3",
         "skip_host_discovery": true
       },
+      "sudo": {
+        "enabled": true,
+        "non_interactive": true,
+        "session_seconds": 300,
+        "privileged_flags": ["-sS", "-O", "-A", "-sU"]
+      },
       "profiles": {
         "default": {
           "flags": ["-Pn", "-T3"]
@@ -67,6 +81,14 @@
         "os_detection": {
           "flags": ["-O"]
         }
+      }
+    },
+    "yougotmapped": {
+      "binary": "yougotmapped",
+      "defaults": {
+        "no_map": true,
+        "default_flags": ["-p", "-c"],
+        "deep_flags": ["-a"]
       }
     }
   }
