@@ -23,7 +23,12 @@ class CommandResult:
         return self.returncode == 0
 
 
-def run_command(args: Sequence[str], *, timeout: float | None = 30.0) -> CommandResult:
+def run_command(
+    args: Sequence[str],
+    *,
+    timeout: float | None = 30.0,
+    input_text: str | None = None,
+) -> CommandResult:
     """Run one command and capture stdout/stderr."""
     started = time.perf_counter()
     try:
@@ -33,6 +38,7 @@ def run_command(args: Sequence[str], *, timeout: float | None = 30.0) -> Command
             text=True,
             timeout=timeout,
             check=False,
+            input=input_text,
         )
     except subprocess.TimeoutExpired as exc:
         elapsed_seconds = time.perf_counter() - started
@@ -44,6 +50,15 @@ def run_command(args: Sequence[str], *, timeout: float | None = 30.0) -> Command
             returncode=124,
             stdout=stdout,
             stderr=message,
+            elapsed_seconds=elapsed_seconds,
+        )
+    except OSError as exc:
+        elapsed_seconds = time.perf_counter() - started
+        return CommandResult(
+            args=tuple(str(arg) for arg in args),
+            returncode=127,
+            stdout="",
+            stderr=str(exc),
             elapsed_seconds=elapsed_seconds,
         )
     elapsed_seconds = time.perf_counter() - started
