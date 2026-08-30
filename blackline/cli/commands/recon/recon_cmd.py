@@ -5,11 +5,12 @@ from __future__ import annotations
 from datetime import datetime
 from difflib import get_close_matches
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from blackline.cli.commands.system.jobs_cmd import append_job_result, derive_completion_state, step_completion_state
 from blackline.config.tool_loader import get_tool_config
 from blackline.core.recon import InvalidReconTargetError, build_recon_pipeline
-from blackline.cli.ui.display import error, result, warn, write_line
+from blackline.cli.ui.display import error, result, warn, write_line, write_segments
 from blackline.engine.runner import normalize_expression, parse_expression, run_expression
 from blackline.engine.session import EngineSession
 
@@ -39,12 +40,16 @@ def handle_recon(
 
     last_nmap_payload: dict[str, object] = {}
     last_successful_nmap_payload: dict[str, object] = {}
+    report_payloads: dict[str, dict] = {}
     first_error = ""
     step_statuses: list[str] = []
     total_elapsed_seconds = 0.0
 
+    render_recon_context(run.context.params, use_color=use_color)
+
     for step in run.results:
         payload = step.payload if isinstance(step.payload, dict) else {}
+        report_payloads[step.tool] = payload
         record_job_result(active_job, step, payload, jobs_root=jobs_root)
         step_statuses.append(
             step_completion_state(
@@ -57,14 +62,7 @@ def handle_recon(
         if not first_error and getattr(step, "error", ""):
             first_error = str(getattr(step, "error", ""))
 
-        if step.tool == "dns":
-            render_dns_result(payload, ok=step.ok, step_error=step.error, use_color=use_color)
-        elif step.tool == "ipintel":
-            render_ipintel_result(payload, ok=step.ok, step_error=step.error, use_color=use_color)
-        elif step.tool == "http":
-            render_http_result(payload, ok=step.ok, step_error=step.error, use_color=use_color)
-        elif step.tool == "nmap":
-            render_nmap_result(payload, ok=step.ok, step_error=step.error, use_color=use_color)
+        if step.tool == "nmap":
             last_nmap_payload = payload
             if step.ok:
                 last_successful_nmap_payload = payload
@@ -94,6 +92,7 @@ def handle_recon(
         return False
 
     if last_nmap_payload or step_statuses:
+        render_recon_report(report_payloads, use_color=use_color)
         render_recon_summary(
             completion_state,
             nmap_payload=last_successful_nmap_payload,
@@ -155,6 +154,154 @@ def format_elapsed(seconds: float) -> str:
         remainder = seconds - (minutes * 60)
         return f"{minutes}m {remainder:.1f}s"
     return f"{seconds:.1f}s"
+
+
+def render_recon_context(params: dict[str, str], *, use_color: bool | None = None) -> None:
+    """Render the concise context for one recon report."""
+    target = params.get("target", "").strip()
+    if target:
+        write_segments([("[info]", "cyan"), (f" target {target}", "white")], use_color=use_color)
+
+    details = []
+    for key in ("strategy", "speed", "probe", "transport"):
+        value = params.get(key, "").strip()
+        if value:
+            details.append(f"{key} {value}")
+    if details:
+        write_segments([("[info]", "cyan"), (f" {' · '.join(details)}", "white")], use_color=use_color)
+    if target or details:
+        write_line(use_color=use_color)
+
+
+def render_recon_report(payloads: dict[str, dict], *, use_color: bool | None = None) -> None:
+    """Render normalized findings while raw adapter output remains in the job."""
+    ipintel = payloads.get("ipintel", {})
+    dns = payloads.get("dns", {})
+    http = payloads.get("http", {})
+    nmap = payloads.get("nmap", {})
+
+    if ipintel:
+        _render_network_section(ipintel, use_color=use_color)
+    if dns:
+        _render_dns_report(dns, use_color=use_color)
+    if http:
+        _render_web_section(http, use_color=use_color)
+    if nmap:
+        _render_services_section(nmap, use_color=use_color)
+        _render_system_section(nmap, use_color=use_color)
+    if ipintel:
+        _render_anonymity_section(ipintel, use_color=use_color)
+
+
+def _render_network_section(payload: dict, *, use_color: bool | None = None) -> None:
+    _render_section_header("network", _provider_names(payload), use_color=use_color)
+    _render_field("address", str(payload.get("lookup_ip") or payload.get("target") or "unknown"), use_color=use_color)
+    _render_field("scope", str(payload.get("location") or "unknown"), use_color=use_color)
+    _render_field("asn", str(payload.get("asn") or "unknown"), use_color=use_color)
+    latency = payload.get("latency")
+    _render_field("latency", f"~{float(latency):.1f} ms" if isinstance(latency, (int, float)) else "unknown", use_color=use_color)
+    if isinstance(payload.get("jitter"), (int, float)):
+        _render_field("jitter", f"{float(payload['jitter']):.1f} ms", use_color=use_color)
+    if isinstance(payload.get("bandwidth"), (int, float)):
+        _render_field("bandwidth", f"~{float(payload['bandwidth']):.2f} Mbps", use_color=use_color)
+    write_line(use_color=use_color)
+
+
+def _render_dns_report(payload: dict, *, use_color: bool | None = None) -> None:
+    _render_section_header("dns", _provider_names(payload), use_color=use_color)
+    records = payload.get("records", {})
+    if isinstance(records, dict):
+        for record_type in ("A", "AAAA", "MX", "NS"):
+            values = records.get(record_type, [])
+            if isinstance(values, list) and values:
+                _render_field(record_type.lower(), ", ".join(str(value) for value in values), use_color=use_color)
+    write_line(use_color=use_color)
+
+
+def _render_web_section(payload: dict, *, use_color: bool | None = None) -> None:
+    _render_section_header("web", _provider_names(payload), use_color=use_color)
+    findings = payload.get("findings", [])
+    rendered = False
+    if isinstance(findings, list):
+        for finding in findings:
+            if not isinstance(finding, dict):
+                continue
+            scheme = urlsplit(str(finding.get("url", ""))).scheme or "http"
+            status = finding.get("status_code")
+            if isinstance(status, int):
+                value = str(status)
+                title = str(finding.get("title", "")).strip()
+                redirect = str(finding.get("redirect_to", "")).strip()
+                if title:
+                    value = f"{value}  {title}"
+                if redirect:
+                    value = f"{value}  -> {redirect}"
+            else:
+                value = "closed"
+            _render_field(scheme, value, use_color=use_color)
+            rendered = True
+    if not rendered:
+        _render_field("status", "unavailable", use_color=use_color)
+    write_line(use_color=use_color)
+
+
+def _render_services_section(payload: dict, *, use_color: bool | None = None) -> None:
+    _render_section_header("services", _provider_names(payload, fallback="nmap"), use_color=use_color)
+    ports = payload.get("ports", [])
+    interesting = [port for port in ports if isinstance(port, dict) and str(port.get("state", "")).lower() in {"open", "filtered"}] if isinstance(ports, list) else []
+    if not interesting:
+        write_line("no open services found", color="muted", use_color=use_color)
+        write_line(use_color=use_color)
+        return
+    write_line("PORT     STATE    SERVICE    VERSION", color="muted", use_color=use_color)
+    for port in interesting:
+        label = f"{port.get('port', '')}/{port.get('protocol', '')}"
+        state = str(port.get("state", ""))
+        service = str(port.get("service", ""))
+        version = str(port.get("version", ""))
+        write_line(f"{label.ljust(8)} {state.ljust(8)} {service.ljust(10)} {version}".rstrip(), use_color=use_color)
+    write_line(use_color=use_color)
+
+
+def _render_system_section(payload: dict, *, use_color: bool | None = None) -> None:
+    system = payload.get("system", {})
+    if not isinstance(system, dict):
+        return
+    rows = [(label, str(system.get(key, "")).strip()) for label, key in (("device", "device"), ("os", "os"), ("kernel", "kernel"), ("cpe", "cpe"), ("distance", "distance"))]
+    rows = [(label, value) for label, value in rows if value]
+    if not rows:
+        return
+    _render_section_header("system", _provider_names(payload, fallback="nmap"), use_color=use_color)
+    for label, value in rows:
+        _render_field(label, value, use_color=use_color)
+    write_line(use_color=use_color)
+
+
+def _render_anonymity_section(payload: dict, *, use_color: bool | None = None) -> None:
+    _render_section_header("anonymity", _provider_names(payload), use_color=use_color)
+    vpn = payload.get("vpn_likely")
+    vpn_text = "likely" if vpn is True else "unlikely" if vpn is False else "unknown"
+    _render_field("vpn", vpn_text, use_color=use_color)
+    _render_field("confidence", str(payload.get("confidence") or "unknown"), use_color=use_color)
+    write_line(use_color=use_color)
+
+
+def _render_section_header(title: str, providers: tuple[str, ...], *, use_color: bool | None = None) -> None:
+    source_label = "source" if len(providers) == 1 else "sources"
+    annotation = f"  ({source_label}: {', '.join(providers)})" if providers else ""
+    write_segments([(title, "cyan"), (annotation, "muted")], use_color=use_color)
+    write_line("─" * len(title), color="muted", use_color=use_color)
+
+
+def _render_field(label: str, value: str, *, use_color: bool | None = None) -> None:
+    write_segments([(f"{label.ljust(11)}", "muted"), (": ", "muted"), (value, "white")], use_color=use_color)
+
+
+def _provider_names(payload: dict, *, fallback: str = "") -> tuple[str, ...]:
+    provider = str(payload.get("provider", "")).strip()
+    if not provider:
+        provider = fallback
+    return (provider,) if provider else ()
 
 
 def render_dns_result(payload: dict, *, ok: bool, step_error: str, use_color: bool | None = None) -> None:
@@ -285,10 +432,11 @@ def render_recon_summary(
     use_color: bool | None = None,
 ) -> None:
     """Render the final recon summary line."""
-    nmap_payload = nmap_payload or {}
-    summary = _recon_summary_text(completion_state, nmap_payload)
-    if elapsed_seconds > 0:
-        summary = f"{summary} ({format_elapsed(elapsed_seconds)})"
+    summary = "recon complete"
+    if completion_state == "completed_with_warnings":
+        summary = "recon complete with warnings"
+    elif completion_state == "partial":
+        summary = "recon partial"
     if active_job:
         summary = f"{summary} -> #{active_job}"
     result(summary, use_color=use_color)

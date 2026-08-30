@@ -15,6 +15,63 @@ from blackline.engine.context import ExecutionContext
 
 
 class ReconCommandTests(unittest.TestCase):
+    def test_render_recon_report_uses_curated_findings_and_provenance(self):
+        output = io.StringIO()
+        payloads = {
+            "ipintel": {
+                "target": "10.0.0.236",
+                "lookup_ip": "10.0.0.236",
+                "asn": "AS-PRIVATE",
+                "location": "private / internal",
+                "latency": 0.6,
+                "jitter": 0.1,
+                "bandwidth": 25.39,
+                "vpn_likely": False,
+                "confidence": "low",
+                "provider": "yougotmapped",
+            },
+            "http": {
+                "provider": "curl",
+                "findings": [
+                    {"url": "http://10.0.0.236", "status_code": None},
+                    {"url": "https://10.0.0.236", "status_code": None},
+                ],
+            },
+            "nmap": {
+                "provider": "nmap",
+                "raw_output": "Starting Nmap 7.99",
+                "ports": [
+                    {
+                        "port": 22,
+                        "protocol": "tcp",
+                        "state": "open",
+                        "service": "ssh",
+                        "version": "OpenSSH 10.2",
+                    }
+                ],
+                "system": {
+                    "device": "general purpose",
+                    "os": "Apple macOS 13.2 (Ventura)",
+                    "kernel": "Darwin 22.3.0",
+                    "cpe": "cpe:/o:apple:mac_os_x:13.2",
+                    "distance": "0 hops",
+                },
+            },
+        }
+
+        with redirect_stdout(output):
+            recon_cmd.render_recon_report(payloads, use_color=False)
+
+        text = output.getvalue()
+        self.assertIn("network  (source: yougotmapped)", text)
+        self.assertIn("web  (source: curl)", text)
+        self.assertIn("services  (source: nmap)", text)
+        self.assertIn("system  (source: nmap)", text)
+        self.assertIn("anonymity  (source: yougotmapped)", text)
+        self.assertIn("OpenSSH 10.2", text)
+        self.assertIn("Darwin 22.3.0", text)
+        self.assertNotIn("Starting Nmap", text)
+
     def test_handle_recon_renders_result_summary(self):
         original_run_expression = recon_cmd.run_expression
 
@@ -56,13 +113,14 @@ class ReconCommandTests(unittest.TestCase):
 
         self.assertTrue(ok)
         text = output.getvalue()
-        self.assertIn("nmap -Pn -T3 -p 1-1024 192.168.1.1", text)
-        self.assertIn("PORT    STATE SERVICE", text)
-        self.assertIn("22/tcp  open", text)
+        self.assertIn("[info] target 192.168.1.1", text)
+        self.assertIn("services  (source: nmap)", text)
+        self.assertIn("PORT     STATE    SERVICE    VERSION", text)
+        self.assertIn("22/tcp   open", text)
         self.assertIn("ssh", text)
-        self.assertIn("80/tcp  open", text)
+        self.assertIn("80/tcp   open", text)
         self.assertIn("http", text)
-        self.assertIn("[result] 2 open ports (50.0s) -> #A12F", text)
+        self.assertIn("[result] recon complete -> #A12F", text)
 
     def test_handle_recon_counts_only_open_ports_in_summary(self):
         original_run_expression = recon_cmd.run_expression
@@ -120,7 +178,7 @@ class ReconCommandTests(unittest.TestCase):
             recon_cmd.run_expression = original_run_expression
 
         self.assertTrue(ok)
-        self.assertIn("[result] 3 open, 3 filtered (3m 44.3s) -> #NFID", output.getvalue())
+        self.assertIn("[result] recon complete -> #NFID", output.getvalue())
 
     def test_handle_recon_renders_dns_section_for_domain_targets(self):
         original_run_expression = recon_cmd.run_expression
@@ -185,12 +243,11 @@ class ReconCommandTests(unittest.TestCase):
 
         self.assertTrue(ok)
         text = output.getvalue()
-        self.assertIn("[dns]", text)
-        self.assertIn("A      93.184.216.34", text)
-        self.assertIn("AAAA   2606:2800:220:1:248:1893:25c8:1946", text)
-        self.assertIn("MX     none", text)
-        self.assertIn("nmap -Pn -T3 -p 1-1024 example.com", text)
-        self.assertIn("[result] 2 open ports (12.4s) -> #A12F", text)
+        self.assertIn("dns  (source: custom)", text)
+        self.assertIn("a          : 93.184.216.34", text)
+        self.assertIn("aaaa       : 2606:2800:220:1:248:1893:25c8:1946", text)
+        self.assertNotIn("Starting Nmap", text)
+        self.assertIn("[result] recon complete -> #A12F", text)
 
     def test_handle_recon_renders_ipintel_section(self):
         original_run_expression = recon_cmd.run_expression
@@ -255,11 +312,11 @@ class ReconCommandTests(unittest.TestCase):
 
         self.assertTrue(ok)
         text = output.getvalue()
-        self.assertIn("[ipintel]", text)
-        self.assertIn("asn       : AS-PRIVATE Private Network", text)
-        self.assertIn("location  : private / internal", text)
-        self.assertIn("vpn       : unlikely", text)
-        self.assertIn("[result] 1 open ports (50.0s) -> #A12F", text)
+        self.assertIn("network  (source: local)", text)
+        self.assertIn("asn        : AS-PRIVATE", text)
+        self.assertIn("scope      : private / internal", text)
+        self.assertIn("vpn        : unlikely", text)
+        self.assertIn("[result] recon complete -> #A12F", text)
 
     def test_handle_recon_renders_http_section(self):
         original_run_expression = recon_cmd.run_expression
@@ -335,11 +392,11 @@ class ReconCommandTests(unittest.TestCase):
 
         self.assertTrue(ok)
         text = output.getvalue()
-        self.assertIn("[http]", text)
-        self.assertIn("https://example.com      200   Example Domain", text)
-        self.assertIn("http://example.com       301", text)
+        self.assertIn("web  (source: custom)", text)
+        self.assertIn("https      : 200  Example Domain", text)
+        self.assertIn("http       : 301", text)
         self.assertIn("-> https://example.com", text)
-        self.assertIn("[result] 1 open ports (12.8s) -> #A12F", text)
+        self.assertIn("[result] recon complete -> #A12F", text)
 
     def test_handle_recon_marks_mixed_http_and_nmap_success_as_warnings(self):
         original_run_expression = recon_cmd.run_expression
@@ -419,7 +476,7 @@ class ReconCommandTests(unittest.TestCase):
             recon_cmd.run_expression = original_run_expression
 
         self.assertTrue(ok)
-        self.assertIn("[result] 3 open, 3 filtered with warnings (50.4s) -> #NFID", output.getvalue())
+        self.assertIn("[result] recon complete with warnings -> #NFID", output.getvalue())
 
     def test_handle_recon_marks_failed_dns_plus_nmap_success_as_partial(self):
         original_run_expression = recon_cmd.run_expression
@@ -480,9 +537,8 @@ class ReconCommandTests(unittest.TestCase):
 
         self.assertTrue(ok)
         text = output.getvalue()
-        self.assertIn("[dns]", text)
-        self.assertIn("dns lookup failed for example.com", text)
-        self.assertIn("[result] 2 open ports, partial (12.5s) -> #A12F", text)
+        self.assertIn("dns  (source: custom)", text)
+        self.assertIn("[result] recon partial -> #A12F", text)
 
     def test_handle_recon_reports_failure_when_all_steps_fail(self):
         original_run_expression = recon_cmd.run_expression
@@ -628,10 +684,10 @@ class ReconCommandTests(unittest.TestCase):
 
         self.assertTrue(ok)
         text = output.getvalue()
-        self.assertIn("[dns]", text)
-        self.assertIn("[http]", text)
-        self.assertIn("nmap -Pn -T3 -p 1-1024 example.com", text)
-        self.assertIn("[result] recon partial (1m 0.5s) -> #A12F", text)
+        self.assertIn("dns  (source: custom)", text)
+        self.assertIn("web  (source: custom)", text)
+        self.assertIn("services  (source: nmap)", text)
+        self.assertIn("[result] recon partial -> #A12F", text)
 
     def test_handle_recon_surfaces_sudo_authentication_error_for_privileged_nmap(self):
         original_run_expression = recon_cmd.run_expression
@@ -725,10 +781,10 @@ class ReconCommandTests(unittest.TestCase):
 
         self.assertTrue(ok)
         text = output.getvalue()
-        self.assertIn("sudo nmap -Pn -sS -T2 --max-retries 2 --top-ports 20 10.0.0.1", text)
-        self.assertIn("[error] sudo authentication required for this scan; run 'sudo -v' and retry", text)
+        self.assertIn("services  (source: nmap)", text)
+        self.assertNotIn("sudo nmap", text)
         self.assertNotIn("No open ports found.", text)
-        self.assertIn("[result] recon partial (0.6s) -> #9HTV", text)
+        self.assertIn("[result] recon partial -> #9HTV", text)
 
     def test_handle_recon_persists_partial_job_on_cancellation(self):
         original_run_expression = recon_cmd.run_expression
@@ -797,7 +853,7 @@ class ReconCommandTests(unittest.TestCase):
         self.assertEqual(job.summary["completed_steps"], 1)
         self.assertEqual(job.summary["failed_steps"], 1)
         self.assertIn("[warn] recon cancelled by user", output.getvalue())
-        self.assertIn("[result] recon partial (0.2s) -> #A12F", output.getvalue())
+        self.assertIn("[result] recon partial -> #A12F", output.getvalue())
 
     def test_render_ports_table_includes_filtered_ports_when_raw_output_is_missing(self):
         output = io.StringIO()

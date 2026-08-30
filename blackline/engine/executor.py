@@ -193,6 +193,7 @@ def execute_step(
             timeout_seconds=timeout_seconds,
         )
         payload = {
+            "provider": "nmap",
             "command": list(display_command(execution.command)),
             "target": execution.parsed.target,
             "host_status": execution.parsed.host_status,
@@ -203,10 +204,18 @@ def execute_step(
                     "protocol": port.protocol,
                     "state": port.state,
                     "service": port.service,
+                    **({"version": port.version} if port.version else {}),
                 }
                 for port in execution.parsed.ports
             ],
             "warnings": list(execution.parsed.warnings),
+            "system": {
+                "device": getattr(execution.parsed, "device_type", ""),
+                "os": getattr(execution.parsed, "operating_system", ""),
+                "kernel": getattr(execution.parsed, "kernel", ""),
+                "cpe": getattr(execution.parsed, "cpe", ""),
+                "distance": getattr(execution.parsed, "distance", ""),
+            },
         }
         counts = port_state_counts(payload["ports"])
         return StepResult(

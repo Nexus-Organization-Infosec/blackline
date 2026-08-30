@@ -52,8 +52,12 @@ class NmapToolTests(unittest.TestCase):
         parsed = parse_nmap_output(
             "Nmap scan report for 192.168.1.1\n"
             "Host is up (0.010s latency).\n"
-            "22/tcp open ssh\n"
+            "22/tcp open ssh OpenSSH 10.2\n"
             "80/tcp closed http\n"
+            "Device type: general purpose\n"
+            "OS CPE: cpe:/o:apple:mac_os_x:13.2\n"
+            "OS details: Apple macOS 13.2 (Ventura) (Darwin 22.3.0)\n"
+            "Network Distance: 0 hops\n"
             "Warning: OSScan results may be unreliable\n"
         )
 
@@ -61,7 +65,13 @@ class NmapToolTests(unittest.TestCase):
         self.assertEqual(parsed.host_status, "up")
         self.assertEqual(len(parsed.ports), 2)
         self.assertEqual(parsed.ports[0].port, 22)
+        self.assertEqual(parsed.ports[0].version, "OpenSSH 10.2")
         self.assertEqual(parsed.ports[1].state, "closed")
+        self.assertEqual(parsed.device_type, "general purpose")
+        self.assertEqual(parsed.operating_system, "Apple macOS 13.2 (Ventura)")
+        self.assertEqual(parsed.kernel, "Darwin 22.3.0")
+        self.assertEqual(parsed.cpe, "cpe:/o:apple:mac_os_x:13.2")
+        self.assertEqual(parsed.distance, "0 hops")
         self.assertEqual(parsed.warnings, ("Warning: OSScan results may be unreliable",))
 
     def test_execute_nmap_with_fake_executor(self):
