@@ -96,18 +96,25 @@ def _short_version(version: str) -> str:
     return version
 
 
-def prompt_line(active_job: str = "", use_color: bool | None = None, readline_safe: bool = True) -> str:
+def prompt_line(
+    active_job: str = "",
+    *,
+    elevated: bool = False,
+    use_color: bool | None = None,
+    readline_safe: bool = True,
+) -> str:
     """Return the interactive shell prompt."""
     if use_color is None:
         use_color = sys.stdout.isatty()
+    symbol = "#" if elevated else "❯"
     if active_job:
         return (
             colorize("bl", "green", enabled=use_color, readline_safe=readline_safe)
             + colorize(" [", "white", enabled=use_color, readline_safe=readline_safe)
             + colorize(f"#{active_job}", "cyan", enabled=use_color, readline_safe=readline_safe)
-            + colorize("] ❯ ", "yellow", enabled=use_color, readline_safe=readline_safe)
+            + colorize(f"] {symbol} ", "yellow", enabled=use_color, readline_safe=readline_safe)
         )
     return (
         colorize("blackline", "green", enabled=use_color, readline_safe=readline_safe)
-        + colorize(" ❯ ", "yellow", enabled=use_color, readline_safe=readline_safe)
+        + colorize(f" {symbol} ", "yellow", enabled=use_color, readline_safe=readline_safe)
     )
