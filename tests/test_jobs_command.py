@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from blackline.cli.commands.system.jobs_cmd import (
+    append_job_result,
     handle_delete_job,
     handle_enter,
     handle_jobs,
@@ -14,6 +15,7 @@ from blackline.cli.commands.system.jobs_cmd import (
     handle_new,
     handle_show,
     list_job_ids,
+    load_job,
     parse_delete_targets,
     parse_job_expression,
 )
@@ -51,14 +53,22 @@ class JobsCommandTests(unittest.TestCase):
         self.assertEqual(data["id"], "A12F")
         self.assertEqual(data["module"], "recon")
         self.assertEqual(data["params"], {"target": "192.168.1.1"})
+        self.assertEqual(data["target"], "192.168.1.1")
+        self.assertEqual(data["target_type"], "ip")
+        self.assertEqual(data["steps"], [])
+        self.assertEqual(data["summary"]["step_count"], 0)
+        self.assertEqual(data["summary"]["result_count"], 0)
+        self.assertEqual(data["ipintel"], {})
         text = output.getvalue()
         self.assertIn("[job]", text)
-        self.assertIn("id      : #A12F", text)
-        self.assertIn("module  : recon", text)
-        self.assertIn("target  : 192.168.1.1", text)
-        self.assertIn("created : 2026-04-23 10:32", text)
-        self.assertIn("status  : initialized", text)
-        self.assertIn("results : 0", text)
+        self.assertIn("id       : #A12F", text)
+        self.assertIn("module   : recon", text)
+        self.assertIn("target   : 192.168.1.1", text)
+        self.assertIn("type     : ip", text)
+        self.assertIn("created  : 2026-04-23 10:32", text)
+        self.assertIn("status   : initialized", text)
+        self.assertIn("steps    : 0", text)
+        self.assertIn("results  : 0", text)
         self.assertIn("[info] entered job #A12F", text)
 
     def test_new_without_expression_creates_manual_job(self):
@@ -84,9 +94,9 @@ class JobsCommandTests(unittest.TestCase):
         self.assertEqual(data["module"], "manual")
         self.assertEqual(data["params"], {})
         text = output.getvalue()
-        self.assertIn("id      : #B93K", text)
-        self.assertIn("module  : manual", text)
-        self.assertIn("results : 0", text)
+        self.assertIn("id       : #B93K", text)
+        self.assertIn("module   : manual", text)
+        self.assertIn("results  : 0", text)
         self.assertIn("[info] entered job #B93K", text)
 
     def test_new_rejects_invalid_module(self):
@@ -100,6 +110,34 @@ class JobsCommandTests(unittest.TestCase):
         self.assertFalse(created)
         self.assertEqual(state.active_job, "")
         self.assertEqual(output.getvalue().strip(), "[error] module not found: reconx")
+
+    def test_new_recon_still_works_when_help_groups_are_unavailable(self):
+        state = ShellState()
+        output = io.StringIO()
+        original_load_help_groups = handle_new.__globals__["load_help_groups"]
+
+        handle_new.__globals__["load_help_groups"] = lambda: ()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                jobs_root = Path(tmp)
+                with redirect_stdout(output):
+                    created = handle_new(
+                        "recon[target=192.168.1.1]",
+                        state,
+                        jobs_root=jobs_root,
+                        created_at=datetime(2026, 4, 23, 10, 32),
+                        job_id="A12F",
+                        use_color=False,
+                    )
+
+                data = json.loads((jobs_root / "A12F.json").read_text(encoding="utf-8"))
+        finally:
+            handle_new.__globals__["load_help_groups"] = original_load_help_groups
+
+        self.assertTrue(created)
+        self.assertEqual(state.active_job, "A12F")
+        self.assertEqual(data["module"], "recon")
+        self.assertIn("[info] entered job #A12F", output.getvalue())
 
     def test_new_missing_args_falls_back_to_interactive_message(self):
         output = io.StringIO()
@@ -138,7 +176,8 @@ class JobsCommandTests(unittest.TestCase):
         self.assertIn("#A12F  recon     initialized", text)
         self.assertIn("[info] entered job #A12F", text)
         self.assertIn("[job]", text)
-        self.assertIn("results : 0", text)
+        self.assertIn("steps    : 0", text)
+        self.assertIn("results  : 0", text)
         self.assertIn("[info] left job #A12F", text)
         self.assertEqual(state.active_job, "")
 
@@ -164,8 +203,284 @@ class JobsCommandTests(unittest.TestCase):
 
         text = output.getvalue()
         self.assertIn("[job]", text)
-        self.assertIn("id      : #A12F", text)
-        self.assertIn("results : 0", text)
+        self.assertIn("id       : #A12F", text)
+        self.assertIn("type     : ip", text)
+        self.assertIn("results  : 0", text)
+
+    def test_append_job_result_upgrades_job_status_and_summary(self):
+        state = ShellState()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            jobs_root = Path(tmp)
+            with redirect_stdout(io.StringIO()):
+                handle_new(
+                    "recon[target=10.0.0.1,strategy=balanced]",
+                    state,
+                    jobs_root=jobs_root,
+                    created_at=datetime(2026, 4, 23, 10, 32),
+                    job_id="A12F",
+                    use_color=False,
+                )
+
+            append_job_result(
+                "A12F",
+                {
+                    "recorded_at": "2026-04-23T10:33:00",
+                    "module": "recon",
+                    "tool": "nmap",
+                    "action": "scan",
+                    "ok": True,
+                    "error": "",
+                    "summary": {
+                        "target": "10.0.0.1",
+                        "host_status": "up",
+                        "open_ports": 2,
+                        "elapsed_seconds": 49.96,
+                    },
+                    "payload": {
+                        "command": ["nmap", "-Pn", "-T3", "-p", "1-1024", "10.0.0.1"],
+                        "target": "10.0.0.1",
+                        "host_status": "up",
+                        "raw_output": "PORT    STATE SERVICE\n80/tcp open http\n443/tcp open https\n",
+                        "ports": [
+                            {"port": 80, "protocol": "tcp", "state": "open", "service": "http"},
+                            {"port": 443, "protocol": "tcp", "state": "open", "service": "https"},
+                        ],
+                        "warnings": [],
+                        "elapsed_seconds": 49.96,
+                    },
+                },
+                jobs_root=jobs_root,
+            )
+
+            job = load_job("A12F", jobs_root)
+
+        self.assertIsNotNone(job)
+        assert job is not None
+        self.assertEqual(job.status, "completed")
+        self.assertEqual(job.summary["step_count"], 1)
+        self.assertEqual(job.summary["result_count"], 1)
+        self.assertEqual(job.summary["open_ports"], 2)
+        self.assertEqual(job.summary["host_status"], "up")
+        self.assertEqual(len(job.steps), 1)
+        self.assertEqual(job.steps[0]["name"], "port_scan")
+        self.assertEqual(job.steps[0]["status"], "completed")
+        self.assertEqual(job.steps[0]["provenance"]["tool"], "nmap")
+
+    def test_append_job_result_marks_http_mixed_findings_as_completed_with_warnings(self):
+        state = ShellState()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            jobs_root = Path(tmp)
+            with redirect_stdout(io.StringIO()):
+                handle_new(
+                    "recon[target=10.0.0.1]",
+                    state,
+                    jobs_root=jobs_root,
+                    created_at=datetime(2026, 4, 23, 10, 32),
+                    job_id="A12F",
+                    use_color=False,
+                )
+
+            append_job_result(
+                "A12F",
+                {
+                    "recorded_at": "2026-04-23T10:33:00",
+                    "module": "recon",
+                    "tool": "http",
+                    "action": "http_ip_probe",
+                    "ok": True,
+                    "error": "",
+                    "summary": {
+                        "target": "10.0.0.1",
+                        "mode": "http_ip_probe",
+                        "findings": 2,
+                        "elapsed_seconds": 0.4,
+                    },
+                    "payload": {
+                        "target": "10.0.0.1",
+                        "mode": "http_ip_probe",
+                        "provider": "custom",
+                        "findings": [
+                            {
+                                "url": "http://10.0.0.1",
+                                "status_code": 200,
+                                "title": "",
+                                "redirect_to": "",
+                                "headers": {},
+                                "ok": True,
+                                "error": "",
+                            },
+                            {
+                                "url": "https://10.0.0.1",
+                                "status_code": None,
+                                "title": "",
+                                "redirect_to": "",
+                                "headers": {},
+                                "ok": False,
+                                "error": "connection timed out",
+                            },
+                        ],
+                        "elapsed_seconds": 0.4,
+                    },
+                },
+                jobs_root=jobs_root,
+            )
+
+            job = load_job("A12F", jobs_root)
+
+        self.assertIsNotNone(job)
+        assert job is not None
+        self.assertEqual(job.status, "completed_with_warnings")
+        self.assertEqual(job.steps[0]["status"], "completed_with_warnings")
+        self.assertEqual(job.summary["warning_steps"], 1)
+        self.assertEqual(job.summary["elapsed_seconds"], 0.4)
+
+    def test_append_job_result_marks_mixed_failed_and_completed_steps_as_partial(self):
+        state = ShellState()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            jobs_root = Path(tmp)
+            with redirect_stdout(io.StringIO()):
+                handle_new(
+                    "recon[target=example.com]",
+                    state,
+                    jobs_root=jobs_root,
+                    created_at=datetime(2026, 4, 23, 10, 32),
+                    job_id="A12F",
+                    use_color=False,
+                )
+
+            append_job_result(
+                "A12F",
+                {
+                    "recorded_at": "2026-04-23T10:33:00",
+                    "module": "recon",
+                    "tool": "dns",
+                    "action": "dns",
+                    "ok": False,
+                    "error": "dns lookup failed for example.com",
+                    "summary": {
+                        "target": "example.com",
+                        "record_count": 0,
+                        "elapsed_seconds": 0.1,
+                    },
+                    "payload": {
+                        "target": "example.com",
+                        "host": "example.com",
+                        "records": {"A": [], "AAAA": [], "MX": [], "NS": []},
+                        "resolved_ips": [],
+                        "provider": "custom",
+                        "raw_output": "",
+                        "elapsed_seconds": 0.1,
+                    },
+                },
+                jobs_root=jobs_root,
+            )
+            append_job_result(
+                "A12F",
+                {
+                    "recorded_at": "2026-04-23T10:34:00",
+                    "module": "recon",
+                    "tool": "nmap",
+                    "action": "port_scan",
+                    "ok": True,
+                    "error": "",
+                    "summary": {
+                        "target": "example.com",
+                        "host_status": "up",
+                        "open_ports": 2,
+                        "elapsed_seconds": 12.4,
+                    },
+                    "payload": {
+                        "command": ["nmap", "-Pn", "-T3", "-p", "1-1024", "example.com"],
+                        "target": "example.com",
+                        "host_status": "up",
+                        "raw_output": "",
+                        "ports": [
+                            {"port": 80, "protocol": "tcp", "state": "open", "service": "http"},
+                            {"port": 443, "protocol": "tcp", "state": "open", "service": "https"},
+                        ],
+                        "warnings": [],
+                        "elapsed_seconds": 12.4,
+                    },
+                },
+                jobs_root=jobs_root,
+            )
+
+            job = load_job("A12F", jobs_root)
+
+        self.assertIsNotNone(job)
+        assert job is not None
+        self.assertEqual(job.status, "partial")
+        self.assertEqual(job.summary["failed_steps"], 1)
+        self.assertEqual(job.summary["completed_steps"], 1)
+        self.assertEqual(job.summary["elapsed_seconds"], 12.5)
+
+    def test_load_job_preserves_legacy_shape_without_corruption(self):
+        output = io.StringIO()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            jobs_root = Path(tmp)
+            (jobs_root / "A12F.json").write_text(
+                json.dumps(
+                    {
+                        "id": "A12F",
+                        "module": "recon",
+                        "params": {"target": "10.0.0.1"},
+                        "created": "2026-04-23 10:32",
+                        "status": "initialized",
+                        "results": [
+                            {
+                                "recorded_at": "2026-04-23T10:33:00",
+                                "module": "recon",
+                                "tool": "nmap",
+                                "action": "scan",
+                                "ok": True,
+                                "error": "",
+                                "summary": {
+                                    "target": "10.0.0.1",
+                                    "host_status": "up",
+                                    "open_ports": 3,
+                                    "elapsed_seconds": 49.96,
+                                },
+                                "payload": {
+                                    "command": ["nmap", "-Pn", "-T3", "-p", "1-1024", "10.0.0.1"],
+                                    "target": "10.0.0.1",
+                                    "host_status": "up",
+                                    "raw_output": "",
+                                    "ports": [
+                                        {"port": 53, "protocol": "tcp", "state": "open", "service": "domain"},
+                                        {"port": 80, "protocol": "tcp", "state": "open", "service": "http"},
+                                        {"port": 443, "protocol": "tcp", "state": "open", "service": "https"},
+                                    ],
+                                    "warnings": [],
+                                    "elapsed_seconds": 49.96,
+                                },
+                            }
+                        ],
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            job = load_job("A12F", jobs_root)
+            with redirect_stdout(output):
+                handle_show(ShellState(), "#A12F", jobs_root=jobs_root, use_color=False)
+
+        self.assertIsNotNone(job)
+        assert job is not None
+        self.assertEqual(job.target, "10.0.0.1")
+        self.assertEqual(job.target_type, "ip")
+        self.assertEqual(job.status, "completed")
+        self.assertEqual(len(job.steps), 1)
+        self.assertEqual(job.summary["open_ports"], 3)
+        text = output.getvalue()
+        self.assertIn("status   : completed", text)
+        self.assertIn("steps    : 1", text)
+        self.assertIn("results  : 1", text)
+        self.assertIn("open     : 3", text)
 
     def test_delete_job_removes_file_and_clears_active_context(self):
         state = ShellState(active_job="A12F")
