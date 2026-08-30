@@ -6,10 +6,11 @@ from dataclasses import dataclass
 import re
 from typing import Callable
 
-from blackline.engine.executor import StepResult, execute_plan
+from blackline.core.recon.pipeline import build_recon_pipeline
+from blackline.engine.executor import ExecutionControl, StepResult, execute_plan
 from blackline.engine.planner import ExecutionPlan, build_plan
-from blackline.engine.state.context import ExecutionContext
-from blackline.engine.state.session import EngineSession
+from blackline.engine.context import ExecutionContext
+from blackline.engine.session import EngineSession
 from blackline.utils.exec import CommandResult
 
 
@@ -20,10 +21,12 @@ class RunResult:
     context: ExecutionContext
     plan: ExecutionPlan
     results: tuple[StepResult, ...]
+    cancelled: bool = False
+    cancellation_reason: str = ""
 
     @property
     def ok(self) -> bool:
-        return all(result.ok for result in self.results)
+        return (not self.cancelled) and all(result.ok for result in self.results)
 
 
 def run_expression(
@@ -36,9 +39,16 @@ def run_expression(
     session = session or EngineSession()
     context = parse_expression(expression, job_id=session.active_job)
     plan = build_plan(context)
-    results = execute_plan(plan, command_executor=command_executor)
+    control = ExecutionControl()
+    results = execute_plan(plan, command_executor=command_executor, control=control)
     session.runs.append(expression)
-    return RunResult(context=context, plan=plan, results=results)
+    return RunResult(
+        context=context,
+        plan=plan,
+        results=results,
+        cancelled=control.cancelled,
+        cancellation_reason=control.cancellation_reason,
+    )
 
 
 def parse_expression(expression: str, *, job_id: str = "") -> ExecutionContext:
@@ -62,7 +72,22 @@ def parse_expression(expression: str, *, job_id: str = "") -> ExecutionContext:
                 continue
             key, value = pair.split("=", 1)
             params[key.strip()] = value.strip()
-    return ExecutionContext(expression=expression, module=module.strip(), params=params, job_id=job_id)
+
+    normalized_target = None
+    clean_module = module.strip()
+    if clean_module == "recon" and params.get("target"):
+        try:
+            normalized_target = build_recon_pipeline(params["target"]).target
+        except ValueError:
+            normalized_target = None
+
+    return ExecutionContext(
+        expression=expression,
+        module=clean_module,
+        params=params,
+        job_id=job_id,
+        normalized_target=normalized_target,
+    )
 
 
 def normalize_expression(expression: str) -> str:
