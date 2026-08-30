@@ -144,6 +144,19 @@ class TabCompleteTests(unittest.TestCase):
     def test_recon_value_completion_length_inside_brackets(self):
         self.assertEqual(current_completion_length("recon[strategy=qu", "strategy=qu"), 2)
 
+    def test_command_completion_degrades_when_help_config_loader_fails(self):
+        original_load_help_groups = tab_complete.load_help_groups
+
+        def broken_load_help_groups():
+            raise FileNotFoundError("commands.json is missing")
+
+        tab_complete.load_help_groups = broken_load_help_groups
+        try:
+            self.assertEqual(complete_text("he"), [])
+            self.assertEqual(command_spans("help nope"), [(0, 4, False)])
+        finally:
+            tab_complete.load_help_groups = original_load_help_groups
+
 
 if __name__ == "__main__":
     unittest.main()
