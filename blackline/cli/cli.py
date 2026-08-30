@@ -7,8 +7,8 @@ import sys
 
 from blackline.cli.commands.system.help_cmd import handle_help
 from blackline.cli.commands.system.jobs_cmd import handle_delete_job, handle_enter, handle_jobs, handle_new, handle_show
-from blackline.cli.commands.tools.recon_cmd import handle_recon
-from blackline.cli.commands.tools.network_cmd import handle_network
+from blackline.cli.commands.recon.recon_cmd import handle_recon
+from blackline.cli.commands.network.network_cmd import handle_network
 from blackline.cli.commands.utils.shell_cmds import (
     ShellState,
     handle_clear,
