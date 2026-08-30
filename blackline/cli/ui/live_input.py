@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import sys
 from typing import Any
 
 from blackline.utils.tab_complete import command_spans, completion_items, current_completion_length
 
 PromptFragments = list[tuple[str, str]]
+_REPORTED_UI_ERRORS: set[str] = set()
 
 
 def create_prompt_session() -> Any | None:
@@ -22,15 +24,23 @@ def create_prompt_session() -> Any | None:
 
     class BlacklineCompleter(Completer):
         def get_completions(self, document: Any, complete_event: Any) -> Any:
-            text = document.text_before_cursor
-            word = document.get_word_before_cursor(WORD=True)
-            replacement_length = current_completion_length(text, word)
-            for suggestion, metadata in completion_items(text):
-                yield Completion(suggestion, start_position=-replacement_length, display_meta=metadata)
+            try:
+                text = document.text_before_cursor
+                word = document.get_word_before_cursor(WORD=True)
+                replacement_length = current_completion_length(text, word)
+                for suggestion, metadata in completion_items(text):
+                    yield Completion(suggestion, start_position=-replacement_length, display_meta=metadata)
+            except Exception as exc:  # pragma: no cover - defensive prompt-toolkit boundary.
+                _report_ui_error(f"completion unavailable: {exc}")
+                return
 
     class BlacklineLexer(Lexer):
         def lex_document(self, document: Any) -> Any:
-            spans = command_spans(document.text)
+            try:
+                spans = command_spans(document.text)
+            except Exception as exc:  # pragma: no cover - defensive prompt-toolkit boundary.
+                _report_ui_error(f"input highlighting unavailable: {exc}")
+                spans = []
 
             def get_line(line_number: int) -> list[tuple[str, str]]:
                 if line_number != 0:
@@ -60,6 +70,8 @@ def create_prompt_session() -> Any | None:
                 "cmd.valid": "#87af87",
                 "cmd.invalid": "#af6f6f",
                 "hint": "#6f6f6f",
+                "auth.tag": "ansibrightyellow",
+                "auth.label": "ansiwhite",
                 "prompt.name": "ansibrightgreen",
                 "prompt.bracket": "ansiwhite",
                 "prompt.job": "ansibrightcyan",
@@ -69,18 +81,19 @@ def create_prompt_session() -> Any | None:
     )
 
 
-def prompt_fragments(active_job: str = "") -> PromptFragments:
+def prompt_fragments(active_job: str = "", *, elevated: bool = False) -> PromptFragments:
     """Return a prompt-toolkit-native prompt."""
+    symbol = "#" if elevated else "❯"
     if active_job:
         return [
             ("class:prompt.name", "bl"),
             ("class:prompt.bracket", " ["),
             ("class:prompt.job", f"#{active_job}"),
-            ("class:prompt.arrow", "] ❯ "),
+            ("class:prompt.arrow", f"] {symbol} "),
         ]
     return [
         ("class:prompt.name", "blackline"),
-        ("class:prompt.arrow", " ❯ "),
+        ("class:prompt.arrow", f" {symbol} "),
     ]
 
 
@@ -96,3 +109,11 @@ def _style_line(text: str, spans: list[tuple[int, int, bool]]) -> list[tuple[str
     if cursor < len(text):
         fragments.append(("", text[cursor:]))
     return fragments
+
+
+def _report_ui_error(message: str) -> None:
+    if message in _REPORTED_UI_ERRORS:
+        return
+    _REPORTED_UI_ERRORS.add(message)
+    sys.__stderr__.write(f"\n[error] {message}\n")
+    sys.__stderr__.flush()
