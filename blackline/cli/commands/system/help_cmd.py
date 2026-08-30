@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,7 @@ from blackline import __version__
 from blackline.cli.ui.display import write_line, write_segments
 
 MIN_RULE_WIDTH = 40
+_REPORTED_CONFIG_ERRORS: set[str] = set()
 
 
 @dataclass(frozen=True, slots=True)
@@ -236,8 +238,15 @@ def _item_from_dict(raw: dict[str, Any]) -> HelpItem:
 
 
 def _load_json(path: Path) -> dict[str, Any]:
-    with path.open("r", encoding="utf-8") as file:
-        data = json.load(file)
+    try:
+        with path.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+    except FileNotFoundError:
+        _report_config_error(f"missing config: {path}")
+        return {}
+    except (OSError, json.JSONDecodeError) as exc:
+        _report_config_error(f"failed to load config {path}: {exc}")
+        return {}
     if not isinstance(data, dict):
         return {}
     return data
@@ -252,3 +261,11 @@ def _short_version(version: str) -> str:
     if len(parts) >= 2:
         return ".".join(parts[:2])
     return version
+
+
+def _report_config_error(message: str) -> None:
+    if message in _REPORTED_CONFIG_ERRORS:
+        return
+    _REPORTED_CONFIG_ERRORS.add(message)
+    sys.__stderr__.write(f"\n[error] {message}\n")
+    sys.__stderr__.flush()
