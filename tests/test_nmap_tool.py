@@ -1,7 +1,7 @@
 import unittest
 from blackline.config.tool_loader import clear_tool_config_cache, get_tool_config
-from blackline.tools.recon.nmap import NmapRequest, build_nmap_command, execute_nmap
-from blackline.tools.recon.parsers.nmap_parser import NmapParsedResult, parse_nmap_output
+from blackline.tools.network.nmap import NmapRequest, build_nmap_command, display_command, execute_nmap
+from blackline.tools.parsers.nmap import NmapParsedResult, parse_nmap_output
 from blackline.utils.exec import CommandResult, run_command
 
 
@@ -32,6 +32,12 @@ class NmapToolTests(unittest.TestCase):
         self.assertEqual(
             command,
             ("nmap", "-Pn", "-sS", "-T2", "--max-retries", "2", "--top-ports", "20", "192.168.1.1"),
+        )
+
+    def test_display_command_strips_non_interactive_sudo_flag(self):
+        self.assertEqual(
+            display_command(("sudo", "-n", "nmap", "-Pn", "10.0.0.1")),
+            ("sudo", "nmap", "-Pn", "10.0.0.1"),
         )
 
     def test_build_nmap_command_uses_aggressive_profile(self):
@@ -74,8 +80,34 @@ class NmapToolTests(unittest.TestCase):
         self.assertEqual(execution.parsed.target, "example.com")
         self.assertEqual(execution.parsed.ports[0].service, "https")
 
+    def test_execute_nmap_uses_sudo_for_privileged_profile(self):
+        seen: dict[str, tuple[str, ...]] = {}
+
+        def fake_executor(args: tuple[str, ...]) -> CommandResult:
+            seen["args"] = args
+            return CommandResult(
+                args=args,
+                returncode=0,
+                stdout="Nmap scan report for 192.168.1.1\nHost is up.\n",
+                stderr="",
+                elapsed_seconds=0.5,
+            )
+
+        execution = execute_nmap(
+            NmapRequest(target="192.168.1.1", profile="stealth", top_ports="20"),
+            executor=fake_executor,
+            config=get_tool_config("nmap"),
+        )
+
+        self.assertTrue(execution.ok)
+        self.assertTrue(execution.used_sudo)
+        self.assertEqual(
+            seen["args"],
+            ("sudo", "-n", "nmap", "-Pn", "-sS", "-T2", "--max-retries", "2", "--top-ports", "20", "192.168.1.1"),
+        )
+
     def test_execute_nmap_without_binary_returns_error(self):
-        from blackline.tools.recon import nmap as nmap_module
+        from blackline.tools.network import nmap as nmap_module
 
         original_which = nmap_module.which
         nmap_module.which = lambda _: None
@@ -114,7 +146,7 @@ class NmapToolTests(unittest.TestCase):
             seen["timeout"] = timeout
             return CommandResult(args=args, returncode=0, stdout="", stderr="", elapsed_seconds=0.25)
 
-        from blackline.tools.recon import nmap as nmap_module
+        from blackline.tools.network import nmap as nmap_module
 
         original_run_command = nmap_module.run_command
         nmap_module.run_command = fake_run_command
@@ -140,6 +172,25 @@ class NmapToolTests(unittest.TestCase):
 
         self.assertFalse(execution.ok)
         self.assertEqual(execution.error, "nmap scan failed: Failed to resolve target.")
+
+    def test_execute_nmap_sudo_auth_error_is_clean(self):
+        def fake_executor(args: tuple[str, ...]) -> CommandResult:
+            return CommandResult(
+                args=args,
+                returncode=1,
+                stdout="",
+                stderr="sudo: a password is required",
+                elapsed_seconds=0.1,
+            )
+
+        execution = execute_nmap(
+            NmapRequest(target="192.168.1.1", profile="stealth"),
+            executor=fake_executor,
+            config=get_tool_config("nmap"),
+        )
+
+        self.assertFalse(execution.ok)
+        self.assertEqual(execution.error, "sudo authentication required for this scan; run 'sudo -v' and retry")
 
     def test_execute_nmap_timeout_returns_clean_error(self):
         result = run_command(("python", "-c", "import time; time.sleep(0.2)"), timeout=0.01)
