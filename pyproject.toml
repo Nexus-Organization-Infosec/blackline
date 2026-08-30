@@ -6,5 +6,12 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = ["prompt_toolkit>=3.0.43"]
 
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
 [project.scripts]
 blackline = "blackline.cli.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
