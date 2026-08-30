@@ -22,12 +22,6 @@ pip install -e .
 blackline
 ```
 
-You can also run a single command directly:
-
-```bash
-blackline --command "help"
-```
-
 ## Recon
 
 `recon` accepts an IP address, domain, or URL and builds an appropriate
