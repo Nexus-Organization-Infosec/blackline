@@ -2,8 +2,8 @@ import io
 import unittest
 from contextlib import redirect_stdout
 
-from blackline.cli.commands.tools import network_cmd
-from blackline.cli.commands.tools.network_cmd import ExternalNetworkInfo, LocalNetworkInfo
+from blackline.cli.commands.network import network_cmd
+from blackline.cli.commands.network.network_cmd import ExternalNetworkInfo, LocalNetworkInfo
 
 
 class NetworkCommandTests(unittest.TestCase):
