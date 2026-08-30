@@ -149,11 +149,14 @@ class NmapToolTests(unittest.TestCase):
         from blackline.tools.network import nmap as nmap_module
 
         original_run_command = nmap_module.run_command
+        original_which = nmap_module.which
         nmap_module.run_command = fake_run_command
+        nmap_module.which = lambda binary: binary
         try:
             execution = execute_nmap(NmapRequest(target="10.0.0.1"), executor=None, config=get_tool_config("nmap"))
         finally:
             nmap_module.run_command = original_run_command
+            nmap_module.which = original_which
 
         self.assertTrue(execution.ok)
         self.assertIsNone(seen["timeout"])

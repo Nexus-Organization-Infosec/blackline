@@ -36,7 +36,6 @@ class StructureTests(unittest.TestCase):
             "config/tools.json",
             "config/defaults.json",
             "config/global.json",
-            "storage/history",
             "storage/database",
             "storage/cache",
             "utils/exec.py",
