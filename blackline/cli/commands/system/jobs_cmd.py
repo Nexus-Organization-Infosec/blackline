@@ -12,9 +12,12 @@ from pathlib import Path
 from blackline.cli.commands.system.help_cmd import load_help_groups
 from blackline.cli.commands.utils.shell_cmds import ShellState
 from blackline.cli.ui.display import error, info, result, write_line, write_segments
+from blackline.config.tool_loader import load_tools_config
+from blackline.core.recon import InvalidReconTargetError, build_recon_pipeline
 
 ID_ALPHABET = string.ascii_uppercase + string.digits
 MANUAL_MODULE = "manual"
+COMPLETION_STATES = {"initialized", "completed", "completed_with_warnings", "partial", "failed"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +29,11 @@ class Job:
     params: dict[str, str]
     created: str
     status: str = "initialized"
+    target: str = ""
+    target_type: str = ""
+    steps: list[dict[str, object]] = field(default_factory=list)
+    summary: dict[str, object] = field(default_factory=dict)
+    ipintel: dict[str, object] = field(default_factory=dict)
     results: list[dict[str, object]] = field(default_factory=list)
 
 
@@ -55,11 +63,29 @@ def handle_new(
         info("missing required fields → entering interactive mode", use_color=use_color)
         return False
 
+    normalized_target = None
+    if module == "recon" and params.get("target"):
+        try:
+            normalized_target = build_recon_pipeline(params["target"]).target
+        except InvalidReconTargetError as exc:
+            error(str(exc), use_color=use_color)
+            return False
+
     jobs_root = jobs_root or default_jobs_root()
     jobs_root.mkdir(parents=True, exist_ok=True)
     identifier = job_id or generate_job_id(jobs_root)
     created = (created_at or datetime.now()).strftime("%Y-%m-%d %H:%M")
-    job = Job(id=identifier, module=module, params=params, created=created)
+    target = params.get("target", "")
+    target_type = normalized_target.target_type if normalized_target else ""
+    job = Job(
+        id=identifier,
+        module=module,
+        params=params,
+        created=created,
+        target=target,
+        target_type=target_type,
+        summary=_build_job_summary(target=target, target_type=target_type, steps=(), legacy_results=()),
+    )
     save_job(job, jobs_root)
     state.active_job = identifier
     if render_summary:
@@ -212,16 +238,40 @@ def parse_job_expression(expression: str) -> tuple[str, dict[str, str]] | None:
 
 def render_job(job: Job, *, use_color: bool | None = None) -> None:
     """Render a compact job summary."""
+    summary = _job_summary(job)
     write_line("[job]", use_color=use_color)
     write_line(use_color=use_color)
     _job_row("id", f"#{job.id}", value_color="cyan", use_color=use_color)
     _job_row("module", job.module, use_color=use_color)
+    if job.target:
+        _job_row("target", job.target, use_color=use_color)
+    if job.target_type:
+        _job_row("type", job.target_type, use_color=use_color)
     for key, value in job.params.items():
+        if key == "target":
+            continue
         _job_row(key, value, use_color=use_color)
     _job_row("created", job.created, use_color=use_color)
     write_line(use_color=use_color)
     _job_row("status", job.status, use_color=use_color)
-    _job_row("results", str(len(job.results)), use_color=use_color)
+    _job_row("steps", str(summary.get("step_count", 0)), use_color=use_color)
+    _job_row("results", str(summary.get("result_count", 0)), use_color=use_color)
+    if "open_ports" in summary:
+        _job_row("open", str(summary.get("open_ports", 0)), use_color=use_color)
+    if "filtered_ports" in summary:
+        _job_row("filtered", str(summary.get("filtered_ports", 0)), use_color=use_color)
+    if "elapsed_seconds" in summary:
+        _job_row("elapsed", _format_elapsed(float(summary.get("elapsed_seconds", 0.0))), use_color=use_color)
+    if job.ipintel:
+        asn = " ".join(part for part in (str(job.ipintel.get("asn", "")).strip(), str(job.ipintel.get("org", "")).strip()) if part)
+        if asn:
+            _job_row("asn", asn, use_color=use_color)
+        location = str(job.ipintel.get("location", "")).strip()
+        if location:
+            _job_row("location", location, use_color=use_color)
+        lookup_ip = str(job.ipintel.get("lookup_ip", "")).strip()
+        if lookup_ip:
+            _job_row("lookup_ip", lookup_ip, use_color=use_color)
     write_line(use_color=use_color)
 
 
@@ -239,16 +289,74 @@ def append_job_result(identifier: str, entry: dict[str, object], jobs_root: Path
     if job is None:
         return False
 
+    step = _normalize_step_entry(entry)
+    steps = [*job.steps, step]
+    summary = _build_job_summary(
+        target=job.target,
+        target_type=job.target_type,
+        steps=steps,
+        legacy_results=[*job.results, entry],
+    )
     updated = Job(
         id=job.id,
         module=job.module,
         params=job.params,
         created=job.created,
-        status=job.status,
+        status=_derive_job_status(steps),
+        target=job.target,
+        target_type=job.target_type,
+        steps=steps,
+        summary=summary,
+        ipintel=_updated_ipintel(job.ipintel, entry),
         results=[*job.results, entry],
     )
     save_job(updated, jobs_root)
     return True
+
+
+def step_completion_state(*, tool: str, ok: bool, payload: dict[str, object]) -> str:
+    """Return the normalized completion state for one executed recon step."""
+    if not ok:
+        return "failed"
+
+    warnings = payload.get("warnings", [])
+    if isinstance(warnings, list) and warnings:
+        return "completed_with_warnings"
+
+    if tool == "http":
+        findings = payload.get("findings", [])
+        if isinstance(findings, list):
+            any_ok = False
+            any_failed = False
+            for finding in findings:
+                if not isinstance(finding, dict):
+                    continue
+                if bool(finding.get("ok", False)):
+                    any_ok = True
+                else:
+                    any_failed = True
+            if any_ok and any_failed:
+                return "completed_with_warnings"
+
+    return "completed"
+
+
+def derive_completion_state(statuses: list[str]) -> str:
+    """Return the aggregate completion state for a sequence of step states."""
+    if not statuses:
+        return "initialized"
+
+    if all(status == "completed" for status in statuses):
+        return "completed"
+    if any(status == "failed" for status in statuses):
+        if any(status in {"completed", "completed_with_warnings", "partial"} for status in statuses):
+            return "partial"
+        return "failed"
+    if any(status == "partial" for status in statuses):
+        return "partial"
+    if any(status == "completed_with_warnings" for status in statuses):
+        return "completed_with_warnings"
+    return "initialized"
 
 
 def load_job(identifier: str, jobs_root: Path) -> Job | None:
@@ -256,14 +364,37 @@ def load_job(identifier: str, jobs_root: Path) -> Job | None:
     path = jobs_root / f"{normalize_job_id(identifier)}.json"
     if not path.exists():
         return None
+
     data = json.loads(path.read_text(encoding="utf-8"))
+    params = {str(key): str(value) for key, value in _mapping(data.get("params")).items()}
+    target = str(data.get("target", "")) or params.get("target", "")
+    target_type = str(data.get("target_type", "")) or _infer_target_type(target)
+    legacy_results = _list_of_dicts(data.get("results"))
+    steps = _list_of_dicts(data.get("steps")) or _legacy_steps_from_results(legacy_results)
+    summary = _mapping(data.get("summary")) or _build_job_summary(
+        target=target,
+        target_type=target_type,
+        steps=steps,
+        legacy_results=legacy_results,
+    )
+    status = str(data.get("status", "initialized"))
+    if status not in COMPLETION_STATES:
+        status = "initialized"
+    if status == "initialized" and steps:
+        status = _derive_job_status(steps)
+
     return Job(
         id=str(data.get("id", "")),
         module=str(data.get("module", "")),
-        params={str(key): str(value) for key, value in data.get("params", {}).items()},
+        params=params,
         created=str(data.get("created", "")),
-        status=str(data.get("status", "initialized")),
-        results=list(data.get("results", [])),
+        status=status,
+        target=target,
+        target_type=target_type,
+        steps=steps,
+        summary=summary,
+        ipintel=_mapping(data.get("ipintel")),
+        results=legacy_results,
     )
 
 
@@ -310,6 +441,7 @@ def available_modules() -> set[str]:
     for group in load_help_groups():
         if group.id == "tools":
             modules.update(item.name for item in group.items)
+    modules.update(_configured_tool_modules())
     return modules
 
 
@@ -318,15 +450,218 @@ def normalize_job_id(identifier: str) -> str:
     return identifier.strip().upper().removeprefix("#")
 
 
+def _configured_tool_modules() -> set[str]:
+    """Return user-facing modules discovered from tool configuration."""
+    raw_tools = load_tools_config().get("tools", {})
+    if not isinstance(raw_tools, dict):
+        return set()
+
+    modules: set[str] = set()
+    for name, config in raw_tools.items():
+        if not isinstance(config, dict):
+            continue
+        if isinstance(config.get("arguments"), dict) or isinstance(config.get("engine"), dict):
+            modules.add(str(name))
+    return modules
+
+
 def default_jobs_root() -> Path:
     """Return the default job storage path."""
     return Path(__file__).resolve().parents[3] / "storage" / "jobs"
 
 
+def _normalize_step_entry(entry: dict[str, object]) -> dict[str, object]:
+    if "name" in entry and "status" in entry and "provenance" in entry:
+        return dict(entry)
+
+    payload = _mapping(entry.get("payload"))
+    results = payload.get("ports")
+    if not isinstance(results, list):
+        results = []
+    summary = _mapping(entry.get("summary"))
+    recorded_at = str(entry.get("recorded_at", datetime.now().isoformat(timespec="seconds")))
+    tool = str(entry.get("tool", ""))
+    status = _step_status_from_entry(entry)
+    command = payload.get("command", [])
+    command_text = " ".join(str(item) for item in command) if isinstance(command, list) else str(command)
+
+    return {
+        "name": _step_name(tool, str(entry.get("action", ""))),
+        "status": status,
+        "error": str(entry.get("error", "")),
+        "command": command_text,
+        "summary": summary,
+        "results": [item for item in results if isinstance(item, dict)],
+        "raw_output": str(payload.get("raw_output", "")),
+        "provenance": {
+            "tool": tool,
+            "timestamp": recorded_at,
+            "confidence": str(entry.get("confidence", "")),
+        },
+    }
+
+
+def _legacy_steps_from_results(results: list[dict[str, object]]) -> list[dict[str, object]]:
+    return [_normalize_step_entry(entry) for entry in results]
+
+
+def _derive_job_status(steps: list[dict[str, object]]) -> str:
+    return derive_completion_state([str(step.get("status", "initialized")) for step in steps])
+
+
+def _step_status_from_entry(entry: dict[str, object]) -> str:
+    payload = _mapping(entry.get("payload"))
+    return step_completion_state(
+        tool=str(entry.get("tool", "")),
+        ok=bool(entry.get("ok", False)),
+        payload=payload,
+    )
+
+
+def _step_name(tool: str, action: str) -> str:
+    if tool == "nmap":
+        return "port_scan"
+    if action:
+        return action
+    if tool:
+        return tool
+    return "step"
+
+
+def _build_job_summary(
+    *,
+    target: str,
+    target_type: str,
+    steps: tuple[dict[str, object], ...] | list[dict[str, object]],
+    legacy_results: tuple[dict[str, object], ...] | list[dict[str, object]],
+) -> dict[str, object]:
+    step_list = list(steps)
+    summary: dict[str, object] = {
+        "step_count": len(step_list),
+        "result_count": _count_job_results(step_list, list(legacy_results)),
+    }
+    if target:
+        summary["target"] = target
+    if target_type:
+        summary["target_type"] = target_type
+
+    open_ports = 0
+    filtered_ports = 0
+    elapsed_seconds = 0.0
+    host_status = ""
+    completed_steps = 0
+    warning_steps = 0
+    failed_steps = 0
+    for step in step_list:
+        step_status = str(step.get("status", "initialized"))
+        if step_status == "completed":
+            completed_steps += 1
+        elif step_status == "completed_with_warnings":
+            warning_steps += 1
+        elif step_status == "failed":
+            failed_steps += 1
+
+        for result_item in step.get("results", []):
+            if not isinstance(result_item, dict):
+                continue
+            state = str(result_item.get("state", "")).lower()
+            if state == "open":
+                open_ports += 1
+            elif state == "filtered":
+                filtered_ports += 1
+
+        step_summary = _mapping(step.get("summary"))
+        if step_summary.get("host_status"):
+            host_status = str(step_summary.get("host_status", ""))
+        if isinstance(step_summary.get("elapsed_seconds"), (int, float)):
+            elapsed_seconds += float(step_summary.get("elapsed_seconds", 0.0))
+
+    if open_ports:
+        summary["open_ports"] = open_ports
+    if filtered_ports:
+        summary["filtered_ports"] = filtered_ports
+    if host_status:
+        summary["host_status"] = host_status
+    if elapsed_seconds > 0:
+        summary["elapsed_seconds"] = elapsed_seconds
+    if completed_steps:
+        summary["completed_steps"] = completed_steps
+    if warning_steps:
+        summary["warning_steps"] = warning_steps
+    if failed_steps:
+        summary["failed_steps"] = failed_steps
+    return summary
+
+
+def _job_summary(job: Job) -> dict[str, object]:
+    return job.summary or _build_job_summary(
+        target=job.target,
+        target_type=job.target_type,
+        steps=job.steps,
+        legacy_results=job.results,
+    )
+
+
+def _count_job_results(steps: list[dict[str, object]], legacy_results: list[dict[str, object]]) -> int:
+    count = sum(1 for step in steps if step.get("results") or step.get("summary") or step.get("error"))
+    if count:
+        return count
+    return len(legacy_results)
+
+
+def _updated_ipintel(current: dict[str, object], entry: dict[str, object]) -> dict[str, object]:
+    if str(entry.get("tool", "")) != "ipintel":
+        return current
+    payload = _mapping(entry.get("payload"))
+    return {
+        "lookup_ip": payload.get("lookup_ip", ""),
+        "asn": payload.get("asn", ""),
+        "org": payload.get("org", ""),
+        "domain": payload.get("domain", ""),
+        "location": payload.get("location", ""),
+        "latency": payload.get("latency"),
+        "vpn_likely": payload.get("vpn_likely"),
+        "confidence": payload.get("confidence", ""),
+        "jitter": payload.get("jitter"),
+        "bandwidth": payload.get("bandwidth"),
+        "mss": payload.get("mss"),
+        "trace": payload.get("trace", []),
+        "provider": payload.get("provider", ""),
+        "raw": payload.get("raw", {}),
+    }
+
+
+def _infer_target_type(target: str) -> str:
+    if not target:
+        return ""
+    try:
+        return build_recon_pipeline(target).target.target_type
+    except InvalidReconTargetError:
+        return ""
+
+
+def _mapping(value: object) -> dict[str, object]:
+    return value if isinstance(value, dict) else {}
+
+
+def _list_of_dicts(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def _format_elapsed(seconds: float) -> str:
+    if seconds >= 60:
+        minutes = int(seconds // 60)
+        remainder = seconds - (minutes * 60)
+        return f"{minutes}m {remainder:.1f}s"
+    return f"{seconds:.1f}s"
+
+
 def _job_row(label: str, value: str, *, value_color: str = "white", use_color: bool | None = None) -> None:
     write_segments(
         [
-            (label.ljust(7), "muted"),
+            (label.ljust(8), "muted"),
             (" : ", "muted"),
             (value, value_color),
         ],
