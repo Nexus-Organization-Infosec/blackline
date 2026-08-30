@@ -115,6 +115,12 @@ class HelpCommandTests(unittest.TestCase):
         lines = output.getvalue().splitlines()
         self.assertEqual(lines[1], "─" * 52)
 
+    def test_missing_help_config_returns_empty_groups(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            groups = load_help_groups(Path(tmp))
+
+        self.assertEqual(groups, ())
+
 
 if __name__ == "__main__":
     unittest.main()
