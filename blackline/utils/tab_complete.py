@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import sys
 
 try:
     import readline
@@ -15,6 +16,7 @@ from blackline.cli.commands.system.jobs_cmd import list_jobs
 
 STATIC_COMMANDS = ("quit",)
 COMMAND_SEPARATORS = ("&", "|", ">", "+", "?", "||", "//")
+_REPORTED_UI_ERRORS: set[str] = set()
 
 
 def known_command_names() -> set[str]:
@@ -25,7 +27,7 @@ def known_command_names() -> set[str]:
 def command_names() -> tuple[str, ...]:
     """Return command names loaded from JSON configuration."""
     names = set(STATIC_COMMANDS)
-    for group in load_help_groups():
+    for group in _safe_help_groups():
         for item in group.items:
             names.add(item.name)
     return tuple(sorted(names))
@@ -34,7 +36,7 @@ def command_names() -> tuple[str, ...]:
 def help_topics() -> tuple[str, ...]:
     """Return help topics loaded from JSON configuration."""
     topics = {"operators"}
-    for group in load_help_groups():
+    for group in _safe_help_groups():
         topics.add(group.id)
         topics.add(group.title.lower())
         for item in group.items:
@@ -44,7 +46,7 @@ def help_topics() -> tuple[str, ...]:
 
 def operator_symbols() -> tuple[str, ...]:
     """Return operator symbols loaded from JSON configuration."""
-    return tuple(operator.get("symbol", "") for operator in load_operators() if operator.get("symbol"))
+    return tuple(operator.get("symbol", "") for operator in _safe_operators() if operator.get("symbol"))
 
 
 def complete_text(text: str) -> list[str]:
@@ -300,7 +302,11 @@ def bracket_suffix(inner: str) -> str:
 
 def recon_argument_config() -> dict[str, dict]:
     """Return recon argument metadata from config."""
-    config = get_tool_config("recon")
+    try:
+        config = get_tool_config("recon")
+    except Exception as exc:
+        _report_ui_error(f"tool config unavailable: {exc}")
+        return {}
     arguments = config.get("arguments", {})
     return arguments if isinstance(arguments, dict) else {}
 
@@ -318,3 +324,27 @@ def argument_description(arguments: dict[str, dict], key: str) -> str:
     if not isinstance(details, dict):
         return ""
     return str(details.get("description", ""))
+
+
+def _safe_help_groups():
+    try:
+        return load_help_groups()
+    except Exception as exc:
+        _report_ui_error(f"command config unavailable: {exc}")
+        return ()
+
+
+def _safe_operators():
+    try:
+        return load_operators()
+    except Exception as exc:
+        _report_ui_error(f"operator config unavailable: {exc}")
+        return ()
+
+
+def _report_ui_error(message: str) -> None:
+    if message in _REPORTED_UI_ERRORS:
+        return
+    _REPORTED_UI_ERRORS.add(message)
+    sys.__stderr__.write(f"\n[error] {message}\n")
+    sys.__stderr__.flush()
