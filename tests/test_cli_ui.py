@@ -11,8 +11,14 @@ class CLIUITests(unittest.TestCase):
     def test_prompt_line(self):
         self.assertEqual(prompt_line(), "blackline ❯ ")
 
+    def test_elevated_prompt_line(self):
+        self.assertEqual(prompt_line(elevated=True), "blackline # ")
+
     def test_job_prompt_line(self):
         self.assertEqual(prompt_line("A12F"), "bl [#A12F] ❯ ")
+
+    def test_elevated_job_prompt_line(self):
+        self.assertEqual(prompt_line("A12F", elevated=True), "bl [#A12F] # ")
 
     def test_prompt_line_color(self):
         self.assertEqual(
@@ -39,6 +45,15 @@ class CLIUITests(unittest.TestCase):
             ],
         )
 
+    def test_prompt_toolkit_elevated_prompt_fragments(self):
+        self.assertEqual(
+            prompt_fragments(elevated=True),
+            [
+                ("class:prompt.name", "blackline"),
+                ("class:prompt.arrow", " # "),
+            ],
+        )
+
     def test_prompt_toolkit_job_prompt_fragments(self):
         self.assertEqual(
             prompt_fragments("A12F"),
@@ -47,6 +62,17 @@ class CLIUITests(unittest.TestCase):
                 ("class:prompt.bracket", " ["),
                 ("class:prompt.job", "#A12F"),
                 ("class:prompt.arrow", "] ❯ "),
+            ],
+        )
+
+    def test_prompt_toolkit_elevated_job_prompt_fragments(self):
+        self.assertEqual(
+            prompt_fragments("A12F", elevated=True),
+            [
+                ("class:prompt.name", "bl"),
+                ("class:prompt.bracket", " ["),
+                ("class:prompt.job", "#A12F"),
+                ("class:prompt.arrow", "] # "),
             ],
         )
 
