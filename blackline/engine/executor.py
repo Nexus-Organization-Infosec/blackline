@@ -27,6 +27,17 @@ class StepResult:
     error: str = ""
 
 
+@dataclass(frozen=True, slots=True)
+class ExecutionProgress:
+    """One lifecycle update emitted while a plan is executing."""
+
+    state: str
+    completed: int
+    total: int
+    step: PlanStep
+    result: StepResult | None = None
+
+
 @dataclass(slots=True)
 class ExecutionControl:
     """Mutable execution control state for one plan run."""
@@ -44,15 +55,19 @@ def execute_plan(
     *,
     command_executor: Callable[[tuple[str, ...]], CommandResult] | None = None,
     control: ExecutionControl | None = None,
+    progress_callback: Callable[[ExecutionProgress], None] | None = None,
 ) -> tuple[StepResult, ...]:
     """Execute each step in the given plan."""
     indexed_steps = tuple(enumerate(plan.steps))
     result_slots: list[StepResult | None] = [None] * len(indexed_steps)
     runtime_state: dict[str, object] = {}
     control = control or ExecutionControl()
+    completed = 0
     for group in _plan_step_groups(indexed_steps):
         if control.cancelled:
             break
+        for _, step in group:
+            _emit_progress(progress_callback, "started", completed, len(indexed_steps), step)
         group_results = _execute_step_group(
             group,
             command_executor=command_executor,
@@ -62,7 +77,23 @@ def execute_plan(
         for index, result in group_results:
             _update_runtime_state(runtime_state, result)
             result_slots[index] = result
+            completed += 1
+            _emit_progress(progress_callback, "completed", completed, len(indexed_steps), plan.steps[index], result)
     return tuple(result for result in result_slots if result is not None)
+
+
+def _emit_progress(
+    callback: Callable[[ExecutionProgress], None] | None,
+    state: str,
+    completed: int,
+    total: int,
+    step: PlanStep,
+    result: StepResult | None = None,
+) -> None:
+    """Safely emit optional execution lifecycle information."""
+    if callback is None:
+        return
+    callback(ExecutionProgress(state, completed, total, step, result))
 
 
 def execute_step(
@@ -86,6 +117,7 @@ def execute_step(
             "records": dict(lookup.records),
             "resolved_ips": list(lookup.resolved_ips),
             "provider": lookup.provider,
+                "outcome": getattr(lookup, "outcome", ""),
             "raw_output": lookup.raw_output,
             "elapsed_seconds": lookup.elapsed_seconds,
         }
