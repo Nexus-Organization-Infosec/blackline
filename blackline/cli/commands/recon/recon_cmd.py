@@ -5,13 +5,17 @@ from __future__ import annotations
 from datetime import datetime
 from difflib import get_close_matches
 from pathlib import Path
+import sys
 from urllib.parse import urlsplit
 
 from blackline.cli.commands.system.jobs_cmd import append_job_result, derive_completion_state, step_completion_state
+from blackline.cli.ui.colors import colorize
 from blackline.config.tool_loader import get_tool_config
 from blackline.core.recon import InvalidReconTargetError, build_recon_pipeline
 from blackline.cli.ui.display import error, result, warn, write_line, write_segments
 from blackline.engine.runner import normalize_expression, parse_expression, run_expression
+from blackline.engine.executor import ExecutionProgress
+from blackline.engine.planner import ExecutionPlan, PlanStep
 from blackline.engine.session import EngineSession
 
 
@@ -29,7 +33,14 @@ def handle_recon(
         error(validation_error, use_color=use_color)
         return False
 
-    run = run_expression(expression, session=EngineSession(active_job=active_job))
+    progress = ReconProgressRenderer(use_color=use_color)
+    run = run_expression(
+        expression,
+        session=EngineSession(active_job=active_job),
+        plan_callback=progress.show_plan,
+        progress_callback=progress.update,
+    )
+    progress.finish(cancelled=run.cancelled)
     if not run.plan.steps:
         error("recon plan is empty", use_color=use_color)
         return False
@@ -104,6 +115,122 @@ def handle_recon(
 
     error(first_error or "recon failed", use_color=use_color)
     return False
+
+
+class ReconProgressRenderer:
+    """Render an in-place stateful preflight checklist in an interactive TTY."""
+
+    def __init__(self, *, use_color: bool | None) -> None:
+        self.enabled = use_color is not False and sys.stdout.isatty()
+        self.total = 0
+        self.steps: list[PlanStep] = []
+        self.states: list[str] = []
+        self.rendered = False
+
+    def show_plan(self, plan: ExecutionPlan) -> None:
+        """Describe the planned checks before the first external tool runs."""
+        if not self.enabled or not plan.steps:
+            return
+        self.total = len(plan.steps)
+        self.steps = list(plan.steps)
+        self.states = ["pending"] * self.total
+        self._render(f"preparing {self.total} checks")
+
+    def update(self, event: ExecutionProgress) -> None:
+        """Refresh the in-place checklist after a step lifecycle event."""
+        if not self.enabled:
+            return
+        self.total = event.total
+        try:
+            index = self.steps.index(event.step)
+        except ValueError:
+            return
+        if event.state == "started":
+            self.states[index] = "running"
+        elif event.state == "completed":
+            self.states[index] = _progress_state(event.result)
+        self._render(f"preparing {self.total} checks")
+
+    def finish(self, *, cancelled: bool = False) -> None:
+        """Render the final checklist state before the report is printed."""
+        if not self.enabled or not self.total:
+            return
+        if cancelled:
+            self.states = ["skipped" if state == "pending" else state for state in self.states]
+        completed = sum(state in {"done", "warning", "failed", "skipped"} for state in self.states)
+        headline = "completed" if completed == self.total else "finished"
+        self._render(f"{completed} checks {headline}")
+
+    def _render(self, headline: str) -> None:
+        if self.rendered:
+            sys.stdout.write(f"\033[{self.total + 1}A\r")
+
+        header = colorize("[plan]", "cyan", enabled=True) + colorize(f" {headline}", "white", enabled=True)
+        sys.stdout.write(f"\033[2K{header}\n")
+        for step, state in zip(self.steps, self.states):
+            label = _progress_label(step)
+            dots = "." * max(3, 32 - len(label))
+            prefix = colorize(f"       {label} {dots} ", "muted", enabled=True)
+            sys.stdout.write(f"\033[2K{prefix}{colorize(state, _progress_color(state), enabled=True)}\n")
+        sys.stdout.flush()
+        self.rendered = True
+
+
+def _progress_label(step: PlanStep) -> str:
+    """Return the human-readable label used by the recon progress view."""
+    labels = {
+        "dns": "DNS lookup",
+        "ipintel": "network intelligence",
+        "http": "web probe",
+        "nmap": "service and system scan",
+    }
+    return labels.get(step.tool, step.action.replace("_", " "))
+
+
+def _progress_state(result: object) -> str:
+    """Return the user-facing completion state for one executed check."""
+    if result is None:
+        return "failed"
+    payload = getattr(result, "payload", {})
+    if getattr(result, "tool", "") == "http" and _http_findings_are_closed(payload):
+        return "done"
+    if not bool(getattr(result, "ok", False)):
+        return "failed"
+    if isinstance(payload, dict):
+        warnings = payload.get("warnings", [])
+        findings = payload.get("findings", [])
+        if isinstance(warnings, list) and warnings:
+            return "warning"
+        if isinstance(findings, list) and any(
+            isinstance(finding, dict) and not finding.get("ok", False) for finding in findings
+        ):
+            return "warning"
+    return "done"
+
+
+def _http_findings_are_closed(payload: object) -> bool:
+    """Return True for a successful negative HTTP observation."""
+    if not isinstance(payload, dict):
+        return False
+    findings = payload.get("findings", [])
+    return isinstance(findings, list) and bool(findings) and all(
+        isinstance(finding, dict)
+        and finding.get("status_code") is None
+        and "connection refused" in str(finding.get("error", "")).lower()
+        for finding in findings
+    )
+
+
+def _progress_color(state: str) -> str:
+    """Return the deliberately restrained color for a checklist state."""
+    return {
+        "done": "green",
+        "running": "yellow",
+        "warning": "yellow",
+        "failed": "red",
+        "skipped": "muted",
+        "pending": "muted",
+    }.get(state, "white")
 
 
 def validate_recon_expression(expression: str) -> str:
@@ -211,7 +338,7 @@ def _render_dns_report(payload: dict, *, use_color: bool | None = None) -> None:
     _render_section_header("dns", _provider_names(payload), use_color=use_color)
     records = payload.get("records", {})
     if isinstance(records, dict):
-        for record_type in ("A", "AAAA", "MX", "NS"):
+        for record_type in ("A", "AAAA", "CNAME", "MX", "NS", "TXT", "SOA", "CAA", "SRV"):
             values = records.get(record_type, [])
             if isinstance(values, list) and values:
                 _render_field(record_type.lower(), ", ".join(str(value) for value in values), use_color=use_color)
@@ -517,6 +644,7 @@ def record_job_result(
                 "target": payload.get("target", ""),
                 "resolved_ips": list(payload.get("resolved_ips", [])) if isinstance(payload.get("resolved_ips", []), list) else [],
                 "record_count": sum(len(values) for values in records.values() if isinstance(values, list)),
+                "outcome": payload.get("outcome", ""),
                 "elapsed_seconds": payload.get("elapsed_seconds"),
             },
             "payload": payload,
