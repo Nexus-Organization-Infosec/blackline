@@ -7,7 +7,7 @@ import re
 from typing import Callable
 
 from blackline.core.recon.pipeline import build_recon_pipeline
-from blackline.engine.executor import ExecutionControl, StepResult, execute_plan
+from blackline.engine.executor import ExecutionControl, ExecutionProgress, StepResult, execute_plan
 from blackline.engine.planner import ExecutionPlan, build_plan
 from blackline.engine.context import ExecutionContext
 from blackline.engine.session import EngineSession
@@ -34,13 +34,22 @@ def run_expression(
     *,
     session: EngineSession | None = None,
     command_executor: Callable[[tuple[str, ...]], CommandResult] | None = None,
+    plan_callback: Callable[[ExecutionPlan], None] | None = None,
+    progress_callback: Callable[[ExecutionProgress], None] | None = None,
 ) -> RunResult:
     """Parse, plan, and execute one expression."""
     session = session or EngineSession()
     context = parse_expression(expression, job_id=session.active_job)
     plan = build_plan(context)
+    if plan_callback is not None:
+        plan_callback(plan)
     control = ExecutionControl()
-    results = execute_plan(plan, command_executor=command_executor, control=control)
+    results = execute_plan(
+        plan,
+        command_executor=command_executor,
+        control=control,
+        progress_callback=progress_callback,
+    )
     session.runs.append(expression)
     return RunResult(
         context=context,
