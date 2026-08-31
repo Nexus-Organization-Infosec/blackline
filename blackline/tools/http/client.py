@@ -90,7 +90,10 @@ def probe_http(
             findings.append(curl_finding)
 
     elapsed_seconds = time.perf_counter() - started
-    ok = any(finding.ok for finding in findings)
+    # A refused connection is a valid negative observation: the probe reached
+    # the target and established that no HTTP service is accepting connections.
+    # It should not make the surrounding recon operation look like it failed.
+    ok = any(finding.ok for finding in findings) or _all_findings_closed(findings)
     error = "" if ok else _first_http_error(findings)
     return HttpProbeResult(
         ok=ok,
@@ -183,3 +186,15 @@ def _first_http_error(findings: list[HttpProbeFinding]) -> str:
         if finding.error:
             return finding.error
     return "http probe failed"
+
+
+def _all_findings_closed(findings: list[HttpProbeFinding]) -> bool:
+    """Return True when every completed probe observed a refused connection."""
+    return bool(findings) and all(
+        finding.status_code is None and _is_connection_refused(finding.error)
+        for finding in findings
+    )
+
+
+def _is_connection_refused(error: str) -> bool:
+    return "connection refused" in error.lower()
