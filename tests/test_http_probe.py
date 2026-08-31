@@ -7,6 +7,18 @@ from blackline.tools.parsers.curl import parse_curl_probe_output
 
 
 class HttpProbeTests(unittest.TestCase):
+    def test_connection_refused_is_a_successful_negative_observation(self):
+        result = client.probe_http(
+            "10.0.0.236",
+            mode="http_ip_probe",
+            fetcher=lambda url, headers, timeout: {"url": url, "error": "[Errno 61] Connection refused"},
+        )
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.error, "")
+        self.assertEqual(len(result.findings), 2)
+        self.assertTrue(all(not finding.ok for finding in result.findings))
+
     def test_probe_http_for_domain_uses_https_then_http(self):
         calls: list[str] = []
 
