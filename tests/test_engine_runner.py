@@ -5,7 +5,7 @@ import time
 
 from blackline.core.recon.models import ReconTarget
 from blackline.engine.executor import ExecutionControl, execute_plan
-from blackline.engine.planner import build_plan
+from blackline.engine.planner import ExecutionPlan, PlanStep, build_plan
 from blackline.engine.runner import normalize_expression, parse_expression, run_expression
 from blackline.engine.context import ExecutionContext
 from blackline.engine.session import EngineSession
@@ -13,6 +13,24 @@ from blackline.utils.exec import CommandResult
 
 
 class EngineRunnerTests(unittest.TestCase):
+    def test_execute_plan_emits_step_progress(self):
+        context = ExecutionContext(expression="unknown", module="unknown")
+        plan = ExecutionPlan(
+            context=context,
+            steps=(PlanStep(tool="unknown", action="check"),),
+        )
+        events = []
+
+        results = execute_plan(plan, progress_callback=events.append)
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual([event.state for event in events], ["started", "completed"])
+        self.assertEqual(events[0].completed, 0)
+        self.assertEqual(events[1].completed, 1)
+        self.assertEqual(events[1].total, 1)
+        self.assertEqual(events[1].step.action, "check")
+        self.assertIs(events[1].result, results[0])
+
     def test_parse_expression_extracts_module_and_params(self):
         context = parse_expression("recon[target=192.168.1.1,ports=80-443]", job_id="A12F")
 
