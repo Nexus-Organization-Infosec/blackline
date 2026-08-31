@@ -1,4 +1,5 @@
 import io
+import re
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -8,13 +9,72 @@ from blackline.cli.commands.recon import recon_cmd
 from blackline.cli.commands.system.jobs_cmd import handle_new, load_job
 from blackline.cli.core_shell import dispatch_line, is_recon_command
 from blackline.cli.commands.utils.shell_cmds import ShellState
-from blackline.engine.executor import StepResult
+from blackline.engine.executor import ExecutionProgress, StepResult
 from blackline.engine.planner import ExecutionPlan, PlanStep
 from blackline.engine.runner import RunResult
 from blackline.engine.context import ExecutionContext
 
 
 class ReconCommandTests(unittest.TestCase):
+    def test_progress_renderer_uses_stateful_checklist_without_percentages(self):
+        class InteractiveOutput(io.StringIO):
+            def isatty(self):
+                return True
+
+        output = InteractiveOutput()
+        plan = ExecutionPlan(
+            context=ExecutionContext(expression="recon[target=10.0.0.1]", module="recon"),
+            steps=(
+                PlanStep(tool="ipintel", action="ipintel"),
+                PlanStep(tool="nmap", action="port_scan"),
+            ),
+        )
+        original_stdout = recon_cmd.sys.stdout
+        recon_cmd.sys.stdout = output
+        try:
+            renderer = recon_cmd.ReconProgressRenderer(use_color=True)
+            renderer.show_plan(plan)
+            renderer.update(ExecutionProgress("started", 0, 2, plan.steps[0]))
+            renderer.update(
+                ExecutionProgress(
+                    "completed",
+                    1,
+                    2,
+                    plan.steps[0],
+                    StepResult(tool="ipintel", action="ipintel", ok=True, payload={}),
+                )
+            )
+            renderer.update(ExecutionProgress("started", 1, 2, plan.steps[1]))
+            renderer.finish()
+        finally:
+            recon_cmd.sys.stdout = original_stdout
+
+        text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", output.getvalue())
+        self.assertIn("[plan] preparing 2 checks", text)
+        self.assertIn("network intelligence", text)
+        self.assertIn("service and system scan", text)
+        self.assertIn("running", text)
+        self.assertIn("done", text)
+        self.assertNotIn("%", text)
+
+    def test_progress_state_treats_closed_http_endpoints_as_done(self):
+        state = recon_cmd._progress_state(
+            StepResult(
+                tool="http",
+                action="http_ip_probe",
+                ok=False,
+                payload={
+                    "findings": [
+                        {"url": "http://10.0.0.236", "status_code": None, "error": "Connection refused"},
+                        {"url": "https://10.0.0.236", "status_code": None, "error": "Connection refused"},
+                    ]
+                },
+                error="Connection refused",
+            )
+        )
+
+        self.assertEqual(state, "done")
+
     def test_render_recon_report_uses_curated_findings_and_provenance(self):
         output = io.StringIO()
         payloads = {
@@ -75,7 +135,7 @@ class ReconCommandTests(unittest.TestCase):
     def test_handle_recon_renders_result_summary(self):
         original_run_expression = recon_cmd.run_expression
 
-        recon_cmd.run_expression = lambda expression, session: RunResult(
+        recon_cmd.run_expression = lambda expression, session, **kwargs: RunResult(
             context=ExecutionContext(expression=expression, module="recon", params={"target": "192.168.1.1"}),
             plan=ExecutionPlan(
                 context=ExecutionContext(expression=expression, module="recon", params={"target": "192.168.1.1"}),
@@ -125,7 +185,7 @@ class ReconCommandTests(unittest.TestCase):
     def test_handle_recon_counts_only_open_ports_in_summary(self):
         original_run_expression = recon_cmd.run_expression
 
-        recon_cmd.run_expression = lambda expression, session: RunResult(
+        recon_cmd.run_expression = lambda expression, session, **kwargs: RunResult(
             context=ExecutionContext(expression=expression, module="recon", params={"target": "10.0.0.1"}),
             plan=ExecutionPlan(
                 context=ExecutionContext(expression=expression, module="recon", params={"target": "10.0.0.1"}),
@@ -183,7 +243,7 @@ class ReconCommandTests(unittest.TestCase):
     def test_handle_recon_renders_dns_section_for_domain_targets(self):
         original_run_expression = recon_cmd.run_expression
 
-        recon_cmd.run_expression = lambda expression, session: RunResult(
+        recon_cmd.run_expression = lambda expression, session, **kwargs: RunResult(
             context=ExecutionContext(expression=expression, module="recon", params={"target": "example.com"}),
             plan=ExecutionPlan(
                 context=ExecutionContext(expression=expression, module="recon", params={"target": "example.com"}),
@@ -252,7 +312,7 @@ class ReconCommandTests(unittest.TestCase):
     def test_handle_recon_renders_ipintel_section(self):
         original_run_expression = recon_cmd.run_expression
 
-        recon_cmd.run_expression = lambda expression, session: RunResult(
+        recon_cmd.run_expression = lambda expression, session, **kwargs: RunResult(
             context=ExecutionContext(expression=expression, module="recon", params={"target": "10.0.0.1"}),
             plan=ExecutionPlan(
                 context=ExecutionContext(expression=expression, module="recon", params={"target": "10.0.0.1"}),
@@ -321,7 +381,7 @@ class ReconCommandTests(unittest.TestCase):
     def test_handle_recon_renders_http_section(self):
         original_run_expression = recon_cmd.run_expression
 
-        recon_cmd.run_expression = lambda expression, session: RunResult(
+        recon_cmd.run_expression = lambda expression, session, **kwargs: RunResult(
             context=ExecutionContext(expression=expression, module="recon", params={"target": "example.com"}),
             plan=ExecutionPlan(
                 context=ExecutionContext(expression=expression, module="recon", params={"target": "example.com"}),
@@ -401,7 +461,7 @@ class ReconCommandTests(unittest.TestCase):
     def test_handle_recon_marks_mixed_http_and_nmap_success_as_warnings(self):
         original_run_expression = recon_cmd.run_expression
 
-        recon_cmd.run_expression = lambda expression, session: RunResult(
+        recon_cmd.run_expression = lambda expression, session, **kwargs: RunResult(
             context=ExecutionContext(expression=expression, module="recon", params={"target": "10.0.0.1"}),
             plan=ExecutionPlan(
                 context=ExecutionContext(expression=expression, module="recon", params={"target": "10.0.0.1"}),
@@ -481,7 +541,7 @@ class ReconCommandTests(unittest.TestCase):
     def test_handle_recon_marks_failed_dns_plus_nmap_success_as_partial(self):
         original_run_expression = recon_cmd.run_expression
 
-        recon_cmd.run_expression = lambda expression, session: RunResult(
+        recon_cmd.run_expression = lambda expression, session, **kwargs: RunResult(
             context=ExecutionContext(expression=expression, module="recon", params={"target": "example.com"}),
             plan=ExecutionPlan(
                 context=ExecutionContext(expression=expression, module="recon", params={"target": "example.com"}),
@@ -543,7 +603,7 @@ class ReconCommandTests(unittest.TestCase):
     def test_handle_recon_reports_failure_when_all_steps_fail(self):
         original_run_expression = recon_cmd.run_expression
 
-        recon_cmd.run_expression = lambda expression, session: RunResult(
+        recon_cmd.run_expression = lambda expression, session, **kwargs: RunResult(
             context=ExecutionContext(expression=expression, module="recon", params={"target": "example.com"}),
             plan=ExecutionPlan(
                 context=ExecutionContext(expression=expression, module="recon", params={"target": "example.com"}),
@@ -607,7 +667,7 @@ class ReconCommandTests(unittest.TestCase):
     def test_handle_recon_returns_partial_results_when_port_scan_times_out(self):
         original_run_expression = recon_cmd.run_expression
 
-        recon_cmd.run_expression = lambda expression, session: RunResult(
+        recon_cmd.run_expression = lambda expression, session, **kwargs: RunResult(
             context=ExecutionContext(expression=expression, module="recon", params={"target": "example.com"}),
             plan=ExecutionPlan(
                 context=ExecutionContext(expression=expression, module="recon", params={"target": "example.com"}),
@@ -692,7 +752,7 @@ class ReconCommandTests(unittest.TestCase):
     def test_handle_recon_surfaces_sudo_authentication_error_for_privileged_nmap(self):
         original_run_expression = recon_cmd.run_expression
 
-        recon_cmd.run_expression = lambda expression, session: RunResult(
+        recon_cmd.run_expression = lambda expression, session, **kwargs: RunResult(
             context=ExecutionContext(expression=expression, module="recon", params={"target": "10.0.0.1"}),
             plan=ExecutionPlan(
                 context=ExecutionContext(expression=expression, module="recon", params={"target": "10.0.0.1"}),
@@ -801,7 +861,7 @@ class ReconCommandTests(unittest.TestCase):
                     use_color=False,
                 )
 
-            recon_cmd.run_expression = lambda expression, session: RunResult(
+            recon_cmd.run_expression = lambda expression, session, **kwargs: RunResult(
                 context=ExecutionContext(expression=expression, module="recon", params={"target": "10.0.0.1"}),
                 plan=ExecutionPlan(
                     context=ExecutionContext(expression=expression, module="recon", params={"target": "10.0.0.1"}),
@@ -875,7 +935,7 @@ class ReconCommandTests(unittest.TestCase):
     def test_handle_recon_fails_soft_when_engine_returns_no_results(self):
         original_run_expression = recon_cmd.run_expression
 
-        recon_cmd.run_expression = lambda expression, session: RunResult(
+        recon_cmd.run_expression = lambda expression, session, **kwargs: RunResult(
             context=ExecutionContext(expression=expression, module="recon", params={"target": "192.168.1.1"}),
             plan=ExecutionPlan(
                 context=ExecutionContext(expression=expression, module="recon", params={"target": "192.168.1.1"}),
