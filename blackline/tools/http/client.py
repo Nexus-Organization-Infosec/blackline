@@ -60,7 +60,7 @@ def probe_http(
     """Probe one recon HTTP target with a curated set of URLs."""
     target = target.strip()
     host = (host or target).strip()
-    urls = _probe_urls(mode=mode, host=host, scheme=scheme, path=path, port=port)
+    urls = build_http_probe_urls(mode=mode, host=host, scheme=scheme, path=path, port=port)
     if not urls:
         return HttpProbeResult(ok=False, target=target, mode=mode, error="missing http target")
 
@@ -106,7 +106,7 @@ def probe_http(
     )
 
 
-def _probe_urls(*, mode: str, host: str, scheme: str, path: str, port: str) -> list[str]:
+def build_http_probe_urls(*, mode: str, host: str, scheme: str, path: str, port: str) -> list[str]:
     if not host:
         return []
 
