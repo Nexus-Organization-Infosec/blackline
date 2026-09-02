@@ -10,9 +10,12 @@ from blackline.config.tool_loader import get_tool_config
 from blackline.core.recon.steps.port_scan import port_state_counts
 from blackline.engine.planner import ExecutionPlan, PlanStep
 from blackline.tools.intel.yougotmapped import resolve_ipintel
+from blackline.tools.intel.rdap import resolve_rdap
 from blackline.tools.dns.resolver import resolve_dns
 from blackline.tools.http.client import probe_http
+from blackline.tools.http.fingerprint import fingerprint_http
 from blackline.tools.network.nmap import NmapRequest, display_command, execute_nmap
+from blackline.tools.tls.inspector import inspect_tls
 from blackline.utils.exec import CommandResult
 
 
@@ -117,7 +120,7 @@ def execute_step(
             "records": dict(lookup.records),
             "resolved_ips": list(lookup.resolved_ips),
             "provider": lookup.provider,
-                "outcome": getattr(lookup, "outcome", ""),
+            "outcome": getattr(lookup, "outcome", ""),
             "raw_output": lookup.raw_output,
             "elapsed_seconds": lookup.elapsed_seconds,
         }
@@ -209,6 +212,91 @@ def execute_step(
             error=http_result.error,
         )
 
+    if step.tool == "tls":
+        tls_result = inspect_tls(
+            str(step.params.get("host", "")),
+            port=_to_port(step.params.get("port", "443")),
+            server_name=str(step.params.get("server_name", "")),
+            timeout_seconds=timeout_seconds if timeout_seconds is not None else 10.0,
+        )
+        payload = {
+            "target": step.params.get("target", ""),
+            "host": tls_result.host,
+            "port": tls_result.port,
+            "subject": tls_result.subject,
+            "issuer": tls_result.issuer,
+            "sans": list(tls_result.sans),
+            "not_before": tls_result.not_before,
+            "not_after": tls_result.not_after,
+            "days_until_expiry": tls_result.days_until_expiry,
+            "protocol": tls_result.protocol,
+            "cipher": tls_result.cipher,
+            "certificate_sha256": tls_result.certificate_sha256,
+            "provider": tls_result.provider,
+            "certificate_parser": tls_result.certificate_parser,
+            "warnings": list(tls_result.warnings),
+            "raw_output": tls_result.raw_output,
+            "elapsed_seconds": tls_result.elapsed_seconds,
+        }
+        return StepResult(step.tool, step.action, tls_result.ok, payload, tls_result.error)
+
+    if step.tool == "fingerprint":
+        fingerprint = fingerprint_http(
+            str(step.params.get("target", "")),
+            mode="http_ip_probe" if step.params.get("target_type") == "ip" else "http_probe",
+            host=str(step.params.get("host", "")),
+            scheme=str(step.params.get("scheme", "")),
+            path=str(step.params.get("path", "")),
+            port=str(step.params.get("port", "")),
+            timeout=timeout_seconds if timeout_seconds is not None else 10.0,
+        )
+        payload = {
+            "target": fingerprint.target,
+            "server": fingerprint.server,
+            "framework": fingerprint.framework,
+            "cms": fingerprint.cms,
+            "javascript": fingerprint.javascript,
+            "security_headers": list(fingerprint.security_headers),
+            "cookies": list(fingerprint.cookies),
+            "confidence": fingerprint.confidence,
+            "evidence": list(fingerprint.evidence),
+            "provider": fingerprint.provider,
+            "skipped": fingerprint.skipped,
+            "warnings": list(fingerprint.warnings),
+            "elapsed_seconds": fingerprint.elapsed_seconds,
+        }
+        return StepResult(step.tool, step.action, fingerprint.ok, payload, fingerprint.error)
+
+    if step.tool == "rdap":
+        runtime_state = runtime_state or {}
+        resolved_ips = runtime_state.get("resolved_ips", [])
+        address = str(step.params.get("host", "")) if step.params.get("target_type") == "ip" else ""
+        if not address and isinstance(resolved_ips, list) and resolved_ips:
+            address = str(resolved_ips[0])
+        domain = str(step.params.get("host", "")) if step.params.get("target_type") != "ip" else ""
+        rdap = resolve_rdap(
+            domain=domain,
+            address=address,
+            timeout_seconds=timeout_seconds if timeout_seconds is not None else 10.0,
+        )
+        payload = {
+            "target": step.params.get("target", ""),
+            "domain": rdap.domain,
+            "registrar": rdap.registrar,
+            "created": rdap.created,
+            "expires": rdap.expires,
+            "status": list(rdap.status),
+            "address": rdap.address,
+            "network": rdap.network,
+            "organization": rdap.organization,
+            "asn": rdap.asn,
+            "provider": rdap.provider,
+            "warnings": list(rdap.warnings),
+            "raw": dict(rdap.raw),
+            "elapsed_seconds": rdap.elapsed_seconds,
+        }
+        return StepResult(step.tool, step.action, rdap.ok, payload, rdap.error)
+
     if step.tool == "nmap":
         execution = _execute_nmap_step(
             NmapRequest(
@@ -271,6 +359,14 @@ def _to_bool(value: str) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _to_port(value: object) -> int:
+    try:
+        port = int(str(value))
+    except (TypeError, ValueError):
+        return 443
+    return port if 1 <= port <= 65535 else 443
+
+
 def _update_runtime_state(runtime_state: dict[str, object], result: StepResult) -> None:
     if result.tool == "dns":
         resolved_ips = result.payload.get("resolved_ips", [])
@@ -292,6 +388,9 @@ def _step_timeout_seconds(tool: str) -> float | None:
         "dns": "dns_seconds",
         "ipintel": "ipintel_seconds",
         "http": "http_seconds",
+        "fingerprint": "http_fingerprint_seconds",
+        "tls": "tls_seconds",
+        "rdap": "rdap_seconds",
         "nmap": "port_scan_seconds",
     }
     raw = timeouts.get(key_map.get(tool, ""))
@@ -365,6 +464,10 @@ def _effective_execution_group(step: PlanStep) -> int:
     target_type = str(step.params.get("target_type", "")).strip().lower()
     if step.tool == "ipintel":
         return 0 if target_type == "ip" else 1
+    if step.tool == "fingerprint":
+        return 1
+    if step.tool == "rdap":
+        return 2
     if step.tool == "nmap":
         return 1 if target_type == "ip" else 2
     return 0
