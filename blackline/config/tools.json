@@ -9,6 +9,9 @@
           "dns_seconds": 15,
           "ipintel_seconds": 30,
           "http_seconds": 10,
+          "http_fingerprint_seconds": 10,
+          "tls_seconds": 10,
+          "rdap_seconds": 10,
           "port_scan_seconds": 0
         }
       },
