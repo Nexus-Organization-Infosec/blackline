@@ -37,7 +37,7 @@ def build_plan(context: ExecutionContext) -> ExecutionPlan:
             steps=tuple(
                 _plan_step_from_recon_step(step, context.params)
                 for step in pipeline.steps
-                if step.tool in {"dns", "ipintel", "http", "nmap"}
+                if step.tool in {"dns", "ipintel", "http", "fingerprint", "tls", "rdap", "nmap"}
             ),
             pipeline=pipeline,
         )
@@ -65,6 +65,30 @@ def _plan_step_from_recon_step(step: ReconStep, params: dict[str, str]) -> PlanS
     if step.tool == "http":
         return PlanStep(
             tool="http",
+            action=step.name,
+            params={key: str(value) for key, value in step.inputs.items()},
+            execution_group=_execution_group(step),
+        )
+
+    if step.tool == "fingerprint":
+        return PlanStep(
+            tool="fingerprint",
+            action=step.name,
+            params={key: str(value) for key, value in step.inputs.items()},
+            execution_group=_execution_group(step),
+        )
+
+    if step.tool == "rdap":
+        return PlanStep(
+            tool="rdap",
+            action=step.name,
+            params={key: str(value) for key, value in step.inputs.items()},
+            execution_group=_execution_group(step),
+        )
+
+    if step.tool == "tls":
+        return PlanStep(
+            tool="tls",
             action=step.name,
             params={key: str(value) for key, value in step.inputs.items()},
             execution_group=_execution_group(step),
@@ -155,6 +179,10 @@ def _execution_group(step: ReconStep) -> int:
         return 1 if target_type == "ip" else 2
     if step.tool == "ipintel":
         return 0 if target_type == "ip" else 1
-    if step.tool in {"dns", "http"}:
+    if step.tool in {"dns", "http", "tls"}:
         return 0
+    if step.tool == "fingerprint":
+        return 1
+    if step.tool == "rdap":
+        return 2
     return 0
