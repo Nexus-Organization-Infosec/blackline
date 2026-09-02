@@ -182,6 +182,9 @@ def _progress_label(step: PlanStep) -> str:
         "dns": "DNS lookup",
         "ipintel": "network intelligence",
         "http": "web probe",
+        "fingerprint": "web fingerprint",
+        "tls": "TLS certificate inspection",
+        "rdap": "RDAP registration and ownership",
         "nmap": "service and system scan",
     }
     return labels.get(step.tool, step.action.replace("_", " "))
@@ -194,6 +197,8 @@ def _progress_state(result: object) -> str:
     payload = getattr(result, "payload", {})
     if getattr(result, "tool", "") == "http" and _http_findings_are_closed(payload):
         return "done"
+    if isinstance(payload, dict) and payload.get("skipped"):
+        return "skipped"
     if not bool(getattr(result, "ok", False)):
         return "failed"
     if isinstance(payload, dict):
@@ -305,6 +310,9 @@ def render_recon_report(payloads: dict[str, dict], *, use_color: bool | None = N
     ipintel = payloads.get("ipintel", {})
     dns = payloads.get("dns", {})
     http = payloads.get("http", {})
+    fingerprint = payloads.get("fingerprint", {})
+    tls = payloads.get("tls", {})
+    rdap = payloads.get("rdap", {})
     nmap = payloads.get("nmap", {})
 
     if ipintel:
@@ -313,6 +321,12 @@ def render_recon_report(payloads: dict[str, dict], *, use_color: bool | None = N
         _render_dns_report(dns, use_color=use_color)
     if http:
         _render_web_section(http, use_color=use_color)
+    if fingerprint:
+        _render_web_fingerprint_section(fingerprint, use_color=use_color)
+    if tls:
+        _render_tls_section(tls, use_color=use_color)
+    if rdap:
+        _render_rdap_sections(rdap, use_color=use_color)
     if nmap:
         _render_services_section(nmap, use_color=use_color)
         _render_system_section(nmap, use_color=use_color)
@@ -372,6 +386,86 @@ def _render_web_section(payload: dict, *, use_color: bool | None = None) -> None
     write_line(use_color=use_color)
 
 
+def _render_tls_section(payload: dict, *, use_color: bool | None = None) -> None:
+    """Render TLS facts without exposing the raw certificate parser output."""
+    _render_section_header("tls", _tls_provider_names(payload), use_color=use_color)
+    _render_field("endpoint", f"{payload.get('host') or payload.get('target') or 'unknown'}:{payload.get('port') or 443}", use_color=use_color)
+    protocol = str(payload.get("protocol", "")).strip()
+    cipher = str(payload.get("cipher", "")).strip()
+    if protocol:
+        _render_field("protocol", protocol, use_color=use_color)
+    if cipher:
+        _render_field("cipher", cipher, use_color=use_color)
+    subject = str(payload.get("subject", "")).strip()
+    issuer = str(payload.get("issuer", "")).strip()
+    if subject:
+        _render_field("subject", subject, use_color=use_color)
+    if issuer:
+        _render_field("issuer", issuer, use_color=use_color)
+    sans = payload.get("sans", [])
+    if isinstance(sans, list) and sans:
+        _render_field("sans", ", ".join(str(value) for value in sans), use_color=use_color)
+    not_after = str(payload.get("not_after", "")).strip()
+    if not_after:
+        expiry = not_after
+        days = payload.get("days_until_expiry")
+        if isinstance(days, int):
+            expiry = f"{expiry} ({days} days)"
+        _render_field("expiry", expiry, use_color=use_color)
+    warnings = payload.get("warnings", [])
+    if isinstance(warnings, list):
+        for warning_text in warnings:
+            _render_field("warning", str(warning_text), use_color=use_color)
+    write_line(use_color=use_color)
+
+
+def _render_web_fingerprint_section(payload: dict, *, use_color: bool | None = None) -> None:
+    """Render technology claims alongside only their recorded confidence."""
+    _render_section_header("web fingerprint", _provider_names(payload, fallback="urllib"), use_color=use_color)
+    if payload.get("skipped"):
+        _render_field("status", "skipped (no HTTP endpoint)", use_color=use_color)
+        write_line(use_color=use_color)
+        return
+    for label, key in (("server", "server"), ("framework", "framework"), ("cms", "cms"), ("javascript", "javascript")):
+        _render_field(label, str(payload.get(key) or "unknown"), use_color=use_color)
+    security_headers = payload.get("security_headers", [])
+    if isinstance(security_headers, list) and security_headers:
+        _render_field("headers", ", ".join(str(value) for value in security_headers), use_color=use_color)
+    cookies = payload.get("cookies", [])
+    if isinstance(cookies, list) and cookies:
+        _render_field("cookies", ", ".join(str(value) for value in cookies), use_color=use_color)
+    _render_field("confidence", str(payload.get("confidence") or "low"), use_color=use_color)
+    write_line(use_color=use_color)
+
+
+def _render_rdap_sections(payload: dict, *, use_color: bool | None = None) -> None:
+    """Render correlated domain registration and address ownership facts."""
+    providers = _provider_names(payload, fallback="rdap.org")
+    domain = str(payload.get("domain", "")).strip()
+    if domain:
+        _render_section_header("registration", providers, use_color=use_color)
+        _render_field("domain", domain, use_color=use_color)
+        _render_field("registrar", str(payload.get("registrar") or "unknown"), use_color=use_color)
+        _render_field("created", str(payload.get("created") or "unknown"), use_color=use_color)
+        _render_field("expires", str(payload.get("expires") or "unknown"), use_color=use_color)
+        status = payload.get("status", [])
+        _render_field("status", ", ".join(str(value) for value in status) if isinstance(status, list) and status else "unknown", use_color=use_color)
+        write_line(use_color=use_color)
+    address = str(payload.get("address", "")).strip()
+    if address:
+        _render_section_header("network ownership", providers, use_color=use_color)
+        _render_field("address", address, use_color=use_color)
+        _render_field("network", str(payload.get("network") or "unknown"), use_color=use_color)
+        _render_field("organization", str(payload.get("organization") or "unknown"), use_color=use_color)
+        _render_field("asn", str(payload.get("asn") or "unknown"), use_color=use_color)
+        write_line(use_color=use_color)
+    warnings = payload.get("warnings", [])
+    if not domain and not address and isinstance(warnings, list) and warnings:
+        _render_section_header("rdap", providers, use_color=use_color)
+        _render_field("status", "unavailable", use_color=use_color)
+        write_line(use_color=use_color)
+
+
 def _render_services_section(payload: dict, *, use_color: bool | None = None) -> None:
     _render_section_header("services", _provider_names(payload, fallback="nmap"), use_color=use_color)
     ports = payload.get("ports", [])
@@ -429,6 +523,15 @@ def _provider_names(payload: dict, *, fallback: str = "") -> tuple[str, ...]:
     if not provider:
         provider = fallback
     return (provider,) if provider else ()
+
+
+def _tls_provider_names(payload: dict) -> tuple[str, ...]:
+    """Report precisely which TLS components produced the displayed facts."""
+    providers = list(_provider_names(payload, fallback="python ssl"))
+    parser = str(payload.get("certificate_parser", "")).strip()
+    if parser and parser not in providers:
+        providers.append(parser)
+    return tuple(providers)
 
 
 def render_dns_result(payload: dict, *, ok: bool, step_error: str, use_color: bool | None = None) -> None:
@@ -687,6 +790,71 @@ def record_job_result(
                 "target": payload.get("target", ""),
                 "mode": payload.get("mode", ""),
                 "findings": len(findings),
+                "elapsed_seconds": payload.get("elapsed_seconds"),
+            },
+            "payload": payload,
+        }
+        append_job_result(active_job, entry, jobs_root=jobs_root)
+        return
+
+    if getattr(step, "tool", "") == "tls":
+        entry = {
+            "recorded_at": datetime.now().isoformat(timespec="seconds"),
+            "module": "recon",
+            "tool": getattr(step, "tool", ""),
+            "action": getattr(step, "action", ""),
+            "ok": bool(getattr(step, "ok", False)),
+            "error": str(getattr(step, "error", "")),
+            "summary": {
+                "target": payload.get("target", ""),
+                "endpoint": f"{payload.get('host', '')}:{payload.get('port', '')}",
+                "protocol": payload.get("protocol", ""),
+                "cipher": payload.get("cipher", ""),
+                "not_after": payload.get("not_after", ""),
+                "elapsed_seconds": payload.get("elapsed_seconds"),
+            },
+            "payload": payload,
+        }
+        append_job_result(active_job, entry, jobs_root=jobs_root)
+        return
+
+    if getattr(step, "tool", "") == "fingerprint":
+        entry = {
+            "recorded_at": datetime.now().isoformat(timespec="seconds"),
+            "module": "recon",
+            "tool": getattr(step, "tool", ""),
+            "action": getattr(step, "action", ""),
+            "ok": bool(getattr(step, "ok", False)),
+            "error": str(getattr(step, "error", "")),
+            "summary": {
+                "target": payload.get("target", ""),
+                "server": payload.get("server", ""),
+                "framework": payload.get("framework", ""),
+                "cms": payload.get("cms", ""),
+                "javascript": payload.get("javascript", ""),
+                "confidence": payload.get("confidence", ""),
+                "elapsed_seconds": payload.get("elapsed_seconds"),
+            },
+            "payload": payload,
+        }
+        append_job_result(active_job, entry, jobs_root=jobs_root)
+        return
+
+    if getattr(step, "tool", "") == "rdap":
+        entry = {
+            "recorded_at": datetime.now().isoformat(timespec="seconds"),
+            "module": "recon",
+            "tool": getattr(step, "tool", ""),
+            "action": getattr(step, "action", ""),
+            "ok": bool(getattr(step, "ok", False)),
+            "error": str(getattr(step, "error", "")),
+            "summary": {
+                "target": payload.get("target", ""),
+                "domain": payload.get("domain", ""),
+                "address": payload.get("address", ""),
+                "registrar": payload.get("registrar", ""),
+                "organization": payload.get("organization", ""),
+                "asn": payload.get("asn", ""),
                 "elapsed_seconds": payload.get("elapsed_seconds"),
             },
             "payload": payload,
