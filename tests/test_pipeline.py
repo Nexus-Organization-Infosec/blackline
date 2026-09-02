@@ -41,7 +41,7 @@ class ReconPipelineTests(unittest.TestCase):
         second = build_recon_pipeline("https://example.com/path")
 
         self.assertEqual(first, second)
-        self.assertEqual([step.name for step in first.steps], ["http_probe", "dns", "ipintel", "port_scan"])
+        self.assertEqual([step.name for step in first.steps], ["http_probe", "web_fingerprint", "dns", "ipintel", "tls_inspection", "rdap", "port_scan"])
         self.assertEqual(first, ReconPipeline(target=second.target, steps=second.steps))
 
     def test_ip_pipeline_order(self):
@@ -49,7 +49,7 @@ class ReconPipelineTests(unittest.TestCase):
 
         self.assertEqual(
             [step.name for step in pipeline.steps],
-            ["reverse_dns", "ipintel", "http_ip_probe", "port_scan"],
+            ["reverse_dns", "ipintel", "http_ip_probe", "web_fingerprint", "tls_inspection", "rdap", "port_scan"],
         )
 
     def test_domain_pipeline_order(self):
@@ -57,7 +57,7 @@ class ReconPipelineTests(unittest.TestCase):
 
         self.assertEqual(
             [step.name for step in pipeline.steps],
-            ["dns", "ipintel", "http_probe", "port_scan"],
+            ["dns", "ipintel", "http_probe", "web_fingerprint", "tls_inspection", "rdap", "port_scan"],
         )
 
     def test_url_pipeline_order(self):
@@ -65,8 +65,13 @@ class ReconPipelineTests(unittest.TestCase):
 
         self.assertEqual(
             [step.name for step in pipeline.steps],
-            ["http_probe", "dns", "ipintel", "port_scan"],
+            ["http_probe", "web_fingerprint", "dns", "ipintel", "tls_inspection", "rdap", "port_scan"],
         )
+
+    def test_http_url_does_not_assume_tls(self):
+        pipeline = build_recon_pipeline("http://example.com/login")
+
+        self.assertNotIn("tls_inspection", [step.name for step in pipeline.steps])
 
     def test_normalize_target_rejects_malformed_target(self):
         with self.assertRaises(InvalidReconTargetError):
