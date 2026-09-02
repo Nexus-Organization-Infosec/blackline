@@ -9,6 +9,9 @@ from blackline.core.recon.steps.dns import dns_step
 from blackline.core.recon.steps.http import http_ip_probe_step, http_probe_step
 from blackline.core.recon.steps.ipintel import ipintel_step
 from blackline.core.recon.steps.port_scan import port_scan_step
+from blackline.core.recon.steps.rdap import rdap_step
+from blackline.core.recon.steps.tls import tls_inspection_step
+from blackline.core.recon.steps.web_fingerprint import web_fingerprint_step
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +35,9 @@ def _steps_for_target(target: ReconTarget, params: dict[str, str]) -> tuple[Reco
             ReconStep(name="reverse_dns", tool="reverse_dns", inputs={"target": target.host}),
             ipintel_step(target, params),
             http_ip_probe_step(target),
+            web_fingerprint_step(target),
+            tls_inspection_step(target),
+            rdap_step(target),
             port_scan_step(target, params),
         )
 
@@ -40,15 +46,21 @@ def _steps_for_target(target: ReconTarget, params: dict[str, str]) -> tuple[Reco
             dns_step(target),
             ipintel_step(target, params),
             http_probe_step(target),
+            web_fingerprint_step(target),
+            tls_inspection_step(target),
+            rdap_step(target),
             port_scan_step(target, params),
         )
 
     if target.target_type == "url":
-        return (
+        steps = (
             http_probe_step(target),
+            web_fingerprint_step(target),
             dns_step(target),
             ipintel_step(target, params),
-            port_scan_step(target, params),
         )
+        if target.scheme == "https" or target.port == "443":
+            steps += (tls_inspection_step(target),)
+        return steps + (rdap_step(target), port_scan_step(target, params))
 
     return ()
