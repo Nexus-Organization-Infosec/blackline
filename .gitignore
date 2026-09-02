@@ -214,7 +214,7 @@ __marimo__/
 .blackline_consent
 history/
 .vscode/
-tools/
+/tools/
 # Python bytecode and test tooling
 __pycache__/
 *.py[cod]
