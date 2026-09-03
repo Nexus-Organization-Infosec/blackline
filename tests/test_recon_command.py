@@ -57,7 +57,7 @@ class ReconCommandTests(unittest.TestCase):
         self.assertIn("done", text)
         self.assertNotIn("%", text)
 
-    def test_progress_state_treats_closed_http_endpoints_as_done(self):
+    def test_progress_state_treats_closed_http_endpoints_as_negative_observations(self):
         state = recon_cmd._progress_state(
             StepResult(
                 tool="http",
@@ -73,7 +73,7 @@ class ReconCommandTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(state, "done")
+        self.assertEqual(state, "negative")
 
     def test_render_recon_report_uses_curated_findings_and_provenance(self):
         output = io.StringIO()
