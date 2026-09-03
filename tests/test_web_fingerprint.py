@@ -4,6 +4,7 @@ from contextlib import redirect_stdout
 
 from blackline.cli.commands.recon.recon_cmd import render_recon_report
 from blackline.tools.http.fingerprint import fingerprint_http
+from tests.fixture_loader import read_json
 
 
 class WebFingerprintTests(unittest.TestCase):
@@ -12,17 +13,7 @@ class WebFingerprintTests(unittest.TestCase):
             "example.com",
             mode="http_probe",
             host="example.com",
-            fetcher=lambda url, headers, timeout: {
-                "status_code": 200,
-                "headers": {
-                    "server": "cloudflare",
-                    "x-powered-by": "Next.js",
-                    "strict-transport-security": "max-age=31536000",
-                    "content-security-policy": "default-src 'self'",
-                    "set-cookie": "session=abc; Secure, theme=dark; Secure",
-                },
-                "body": '<script src="/_next/static/app.js"></script><div data-reactroot></div>',
-            },
+            fetcher=lambda url, headers, timeout: read_json("http", "nextjs_cloudflare.json"),
         )
 
         self.assertTrue(result.ok)
