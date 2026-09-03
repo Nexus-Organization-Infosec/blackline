@@ -24,6 +24,98 @@ from blackline.cli.core_shell import dispatch_line
 
 
 class JobsCommandTests(unittest.TestCase):
+    def _job_with_evidence(self, jobs_root: Path) -> ShellState:
+        state = ShellState()
+        with redirect_stdout(io.StringIO()):
+            handle_new("recon[target=example.com]", state, jobs_root=jobs_root, job_id="A12F", use_color=False)
+        append_job_result(
+            "A12F",
+            {
+                "module": "recon",
+                "tool": "dns",
+                "action": "dns",
+                "ok": True,
+                "error": "",
+                "payload": {"provider": "dnspython", "records": {"A": ["192.0.2.10"]}, "raw_output": "DNS raw artifact", "elapsed_seconds": 0.1},
+            },
+            jobs_root=jobs_root,
+        )
+        append_job_result(
+            "A12F",
+            {
+                "module": "recon",
+                "tool": "tls",
+                "action": "tls_inspection",
+                "ok": True,
+                "error": "",
+                "payload": {"provider": "python ssl", "certificate_parser": "openssl", "host": "example.com", "port": 443, "protocol": "TLSv1.3", "elapsed_seconds": 0.1},
+            },
+            jobs_root=jobs_root,
+        )
+        append_job_result(
+            "A12F",
+            {
+                "module": "recon",
+                "tool": "evidence",
+                "action": "correlation",
+                "ok": True,
+                "error": "",
+                "payload": {"target": "example.com", "claims": [{"subject": "example.com", "predicate": "resolves_to", "value": "192.0.2.10", "sources": ["dnspython"]}], "warnings": [], "elapsed_seconds": 0.0},
+            },
+            jobs_root=jobs_root,
+        )
+        return state
+
+    def test_show_sources_lists_provider_provenance_for_active_job(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            jobs_root = Path(tmp)
+            state = self._job_with_evidence(jobs_root)
+            output = io.StringIO()
+            with redirect_stdout(output):
+                handle_show(state, "sources", jobs_root=jobs_root, use_color=False)
+
+        text = output.getvalue()
+        self.assertIn("sources", text)
+        self.assertIn("dns          : dnspython", text)
+        self.assertIn("tls          : python ssl, openssl", text)
+        self.assertIn("evidence     : dnspython", text)
+
+    def test_show_raw_only_prints_stored_raw_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            jobs_root = Path(tmp)
+            state = self._job_with_evidence(jobs_root)
+            output = io.StringIO()
+            with redirect_stdout(output):
+                handle_show(state, "raw", jobs_root=jobs_root, use_color=False)
+
+        text = output.getvalue()
+        self.assertIn("raw dns", text)
+        self.assertIn("DNS raw artifact", text)
+        self.assertNotIn("TLSv1.3", text)
+
+    def test_show_section_uses_curated_section_renderer_and_supports_explicit_job(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            jobs_root = Path(tmp)
+            state = self._job_with_evidence(jobs_root)
+            output = io.StringIO()
+            with redirect_stdout(output):
+                handle_show(state, "#A12F tls", jobs_root=jobs_root, use_color=False)
+
+        text = output.getvalue()
+        self.assertIn("tls  (sources: python ssl, openssl)", text)
+        self.assertIn("protocol   : TLSv1.3", text)
+        self.assertNotIn("DNS raw artifact", text)
+
+    def test_show_correlation_maps_the_persisted_evidence_result(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            jobs_root = Path(tmp)
+            state = self._job_with_evidence(jobs_root)
+            output = io.StringIO()
+            with redirect_stdout(output):
+                handle_show(state, "correlation", jobs_root=jobs_root, use_color=False)
+
+        self.assertIn("correlation  (source: dnspython)", output.getvalue())
+
     def test_parse_job_expression(self):
         self.assertEqual(
             parse_job_expression("recon[target=192.168.1.1,ports=80-443]"),
