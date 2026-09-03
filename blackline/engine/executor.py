@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from blackline.config.tool_loader import get_tool_config
+from blackline.core.recon.outcomes import classify_result, outcome_is_success
 from blackline.core.recon.steps.port_scan import port_state_counts
 from blackline.engine.planner import ExecutionPlan, PlanStep
 from blackline.tools.intel.yougotmapped import resolve_ipintel
@@ -28,6 +29,17 @@ class StepResult:
     ok: bool
     payload: dict
     error: str = ""
+    outcome: str = ""
+
+    def __post_init__(self) -> None:
+        """Attach one canonical outcome and make negative observations successful."""
+        payload = dict(self.payload)
+        outcome = self.outcome or classify_result(tool=self.tool, ok=self.ok, payload=payload, error=self.error)
+        payload.setdefault("result_outcome", outcome)
+        object.__setattr__(self, "payload", payload)
+        object.__setattr__(self, "outcome", outcome)
+        if outcome_is_success(outcome) and not self.ok:
+            object.__setattr__(self, "ok", True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,6 +133,7 @@ def execute_step(
             "resolved_ips": list(lookup.resolved_ips),
             "provider": lookup.provider,
             "outcome": getattr(lookup, "outcome", ""),
+            "negative_observation": getattr(lookup, "outcome", "") in {"no_data", "nxdomain"},
             "raw_output": lookup.raw_output,
             "elapsed_seconds": lookup.elapsed_seconds,
         }
@@ -236,6 +249,7 @@ def execute_step(
             "certificate_parser": tls_result.certificate_parser,
             "warnings": list(tls_result.warnings),
             "raw_output": tls_result.raw_output,
+            "negative_observation": "connection refused" in tls_result.error.lower(),
             "elapsed_seconds": tls_result.elapsed_seconds,
         }
         return StepResult(step.tool, step.action, tls_result.ok, payload, tls_result.error)
@@ -291,6 +305,7 @@ def execute_step(
             "organization": rdap.organization,
             "asn": rdap.asn,
             "provider": rdap.provider,
+            "negative_observation": bool(getattr(rdap, "negative_observation", False)),
             "warnings": list(rdap.warnings),
             "raw": dict(rdap.raw),
             "elapsed_seconds": rdap.elapsed_seconds,
@@ -329,6 +344,9 @@ def execute_step(
                 for port in execution.parsed.ports
             ],
             "warnings": list(execution.parsed.warnings),
+            "negative_observation": execution.ok and not any(
+                str(port.state).lower() in {"open", "filtered"} for port in execution.parsed.ports
+            ),
             "system": {
                 "device": getattr(execution.parsed, "device_type", ""),
                 "os": getattr(execution.parsed, "operating_system", ""),
