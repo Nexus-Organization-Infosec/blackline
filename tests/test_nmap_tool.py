@@ -3,6 +3,7 @@ from blackline.config.tool_loader import clear_tool_config_cache, get_tool_confi
 from blackline.tools.network.nmap import NmapRequest, build_nmap_command, display_command, execute_nmap
 from blackline.tools.parsers.nmap import NmapParsedResult, parse_nmap_output
 from blackline.utils.exec import CommandResult, run_command
+from tests.fixture_loader import read_text
 
 
 class NmapToolTests(unittest.TestCase):
@@ -49,17 +50,7 @@ class NmapToolTests(unittest.TestCase):
         self.assertEqual(command, ("nmap", "-Pn", "-T5", "-A", "-p", "1-1024", "example.com"))
 
     def test_parse_nmap_output(self):
-        parsed = parse_nmap_output(
-            "Nmap scan report for 192.168.1.1\n"
-            "Host is up (0.010s latency).\n"
-            "22/tcp open ssh OpenSSH 10.2\n"
-            "80/tcp closed http\n"
-            "Device type: general purpose\n"
-            "OS CPE: cpe:/o:apple:mac_os_x:13.2\n"
-            "OS details: Apple macOS 13.2 (Ventura) (Darwin 22.3.0)\n"
-            "Network Distance: 0 hops\n"
-            "Warning: OSScan results may be unreliable\n"
-        )
+        parsed = parse_nmap_output(read_text("nmap", "macos_ssh.txt"))
 
         self.assertEqual(parsed.target, "192.168.1.1")
         self.assertEqual(parsed.host_status, "up")
