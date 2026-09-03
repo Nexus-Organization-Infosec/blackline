@@ -1,0 +1,14 @@
+{
+  "ldhName": "owasp.org",
+  "status": ["active"],
+  "events": [
+    {"eventAction": "registration", "eventDate": "2001-09-27T00:00:00Z"},
+    {"eventAction": "expiration", "eventDate": "2030-09-27T00:00:00Z"}
+  ],
+  "entities": [
+    {
+      "roles": ["registrar"],
+      "vcardArray": ["vcard", [["fn", {}, "text", "Example Registrar"]]]
+    }
+  ]
+}

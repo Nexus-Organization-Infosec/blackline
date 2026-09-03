@@ -1,0 +1,11 @@
+{
+  "status_code": 200,
+  "headers": {
+    "server": "cloudflare",
+    "x-powered-by": "Next.js",
+    "strict-transport-security": "max-age=31536000",
+    "content-security-policy": "default-src 'self'",
+    "set-cookie": "session=fixture-value; Secure, theme=dark; Secure"
+  },
+  "body": "<script src=\"/_next/static/app.js\"></script><div data-reactroot></div>"
+}

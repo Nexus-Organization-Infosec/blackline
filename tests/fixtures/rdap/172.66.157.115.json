@@ -1,0 +1,12 @@
+{
+  "startAddress": "172.66.157.0",
+  "endAddress": "172.66.157.255",
+  "name": "CLOUDFLARENET",
+  "arin_originas0_originautnums": [13335],
+  "entities": [
+    {
+      "roles": ["registrant"],
+      "vcardArray": ["vcard", [["fn", {}, "text", "Cloudflare, Inc."]]]
+    }
+  ]
+}

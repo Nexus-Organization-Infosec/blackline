@@ -1,0 +1,6 @@
+subject=CN = example.com
+issuer=C = US, O = Example CA, CN = Example Issuer
+notBefore=Aug 30 12:00:00 2026 GMT
+notAfter=Sep 30 12:00:00 2027 GMT
+X509v3 Subject Alternative Name:
+    DNS:example.com, DNS:www.example.com, IP Address:192.0.2.10

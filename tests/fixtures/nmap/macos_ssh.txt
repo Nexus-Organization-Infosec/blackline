@@ -1,0 +1,9 @@
+Nmap scan report for 192.168.1.1
+Host is up (0.010s latency).
+22/tcp open ssh OpenSSH 10.2
+80/tcp closed http
+Device type: general purpose
+OS CPE: cpe:/o:apple:mac_os_x:13.2
+OS details: Apple macOS 13.2 (Ventura) (Darwin 22.3.0)
+Network Distance: 0 hops
+Warning: OSScan results may be unreliable
