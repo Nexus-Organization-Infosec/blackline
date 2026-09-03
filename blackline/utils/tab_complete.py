@@ -15,6 +15,19 @@ from blackline.cli.commands.system.help_cmd import load_help_groups, load_operat
 from blackline.cli.commands.system.jobs_cmd import list_jobs
 
 STATIC_COMMANDS = ("quit",)
+SHOW_VIEWS = (
+    ("sources", "job provenance"),
+    ("raw", "stored raw artifacts"),
+    ("dns", "DNS report section"),
+    ("network", "network intelligence section"),
+    ("web", "HTTP report section"),
+    ("fingerprint", "web fingerprint section"),
+    ("tls", "TLS report section"),
+    ("rdap", "registration and ownership section"),
+    ("services", "service scan section"),
+    ("system", "system fingerprint section"),
+    ("correlation", "evidence correlation section"),
+)
 COMMAND_SEPARATORS = ("&", "|", ">", "+", "?", "||", "//")
 _REPORTED_UI_ERRORS: set[str] = set()
 
@@ -132,13 +145,20 @@ def enter_target_items(text: str) -> list[tuple[str, str]]:
 
 
 def show_target_items(text: str) -> list[tuple[str, str]]:
-    """Return existing job ids and metadata for show completion."""
-    current = text.removeprefix("show ").strip().upper()
-    return [
+    """Return job IDs plus active-job inspection views for show completion."""
+    remainder = text.removeprefix("show ")
+    tokens = remainder.split(maxsplit=1)
+    if tokens and tokens[0].startswith("#") and len(tokens) > 1:
+        current = tokens[1].strip().lower()
+        return [(view, meta) for view, meta in SHOW_VIEWS if view.startswith(current)]
+    current = remainder.strip()
+    job_items = [
         (f"#{job.id}", f"{job.module} {job.status}")
         for job in list_jobs()
-        if f"#{job.id}".startswith(current)
+        if f"#{job.id}".startswith(current.upper())
     ]
+    view_items = [(view, meta) for view, meta in SHOW_VIEWS if view.startswith(current.lower())]
+    return [*view_items, *job_items]
 
 
 def current_completion_length(text: str, word: str) -> int:
