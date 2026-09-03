@@ -26,8 +26,8 @@
           "description": "scan the top N common ports"
         },
         "strategy": {
-          "description": "recon strategy",
-          "choices": ["balanced", "quiet", "fast", "deep", "udp"]
+          "description": "recon profile or scan strategy",
+          "choices": ["surface", "balanced", "quiet", "fast", "deep", "udp"]
         },
         "speed": {
           "description": "execution speed",
