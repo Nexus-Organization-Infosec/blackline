@@ -6,18 +6,12 @@ from blackline.cli.commands.recon.recon_cmd import render_recon_report
 from blackline.core.recon.models import normalize_recon_target
 from blackline.core.recon.steps.tls import tls_inspection_step
 from blackline.tools.tls.inspector import parse_openssl_certificate_output
+from tests.fixture_loader import read_text
 
 
 class TlsInspectorTests(unittest.TestCase):
     def test_parse_openssl_certificate_output_extracts_certificate_facts(self):
-        metadata = parse_openssl_certificate_output(
-            "subject=CN = example.com\n"
-            "issuer=C = US, O = Example CA, CN = Example Issuer\n"
-            "notBefore=Aug 30 12:00:00 2026 GMT\n"
-            "notAfter=Sep 30 12:00:00 2027 GMT\n"
-            "X509v3 Subject Alternative Name:\n"
-            "    DNS:example.com, DNS:www.example.com, IP Address:192.0.2.10\n"
-        )
+        metadata = parse_openssl_certificate_output(read_text("tls", "openssl_x509_example.txt"))
 
         self.assertEqual(metadata["subject"], "CN = example.com")
         self.assertEqual(metadata["issuer"], "C = US, O = Example CA, CN = Example Issuer")
