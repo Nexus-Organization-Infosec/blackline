@@ -94,10 +94,10 @@
         },
         {
           "name": "show",
-          "description": "show current job or a specific job",
-          "usage": "show [#ID]",
+          "description": "inspect a job summary, report section, sources, or raw evidence",
+          "usage": "show [#ID] [sources|raw|section]",
           "arguments": [["id", "optional job identifier"]],
-          "examples": ["show", "show #A12F"]
+          "examples": ["show", "show sources", "show raw", "show tls", "show #A12F sources"]
         },
         {
           "name": "jobs",
@@ -154,7 +154,7 @@
           "long_description": "perform reconnaissance on a target",
           "arguments": [
             ["target", "target ip or domain"],
-            ["strategy", "balanced, quiet, fast, deep, or udp"],
+            ["strategy", "surface, balanced, quiet, fast, deep, or udp"],
             ["probe", "surface, service, script, or fingerprint"]
           ],
           "examples": [
