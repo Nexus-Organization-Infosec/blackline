@@ -38,10 +38,18 @@ Supported recon options are:
 - `target` — required IP address, domain, or URL
 - `ports` — ports or port ranges, such as `22,80,443` or `1-1024`
 - `top_ports` — scan the top N common ports
-- `strategy` — `balanced`, `quiet`, `fast`, `deep`, or `udp`
+- `strategy` — `surface`, `balanced`, `quiet`, `fast`, `deep`, or `udp`
 - `speed` — `low`, `normal`, `high`, or `aggressive`
 - `probe` — `surface`, `service`, `script`, or `fingerprint`
 - `transport` — `tcp` or `udp`
+
+Profiles deliberately choose different work:
+
+- `surface` performs DNS, ordinary web/TLS observations, fingerprinting, and RDAP—no port scan or network-intel lookup.
+- `balanced` runs the complete standard evidence set.
+- `deep` runs the complete set with deep network intelligence and the aggressive Nmap profile.
+
+`quiet`, `fast`, and `udp` remain compatibility strategies; `fast` uses the surface evidence set.
 
 Only scan systems you own or are explicitly authorized to test.
 
