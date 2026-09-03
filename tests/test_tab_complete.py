@@ -117,9 +117,12 @@ class TabCompleteTests(unittest.TestCase):
 
             tab_complete.list_jobs.__globals__["default_jobs_root"] = fake_default_jobs_root
             try:
-                self.assertEqual(show_target_replacements("show "), ["#A12F", "#B93K"])
+                self.assertEqual(show_target_replacements("show "), [
+                    "sources", "raw", "dns", "network", "web", "fingerprint", "tls", "rdap", "services", "system", "correlation", "#A12F", "#B93K",
+                ])
                 self.assertEqual(show_target_replacements("show #B"), ["#B93K"])
                 self.assertIn(("#A12F", "manual initialized"), completion_items("show #A"))
+                self.assertIn(("sources", "job provenance"), completion_items("show so"))
             finally:
                 tab_complete.list_jobs.__globals__["default_jobs_root"] = original_default_jobs_root
 
@@ -134,7 +137,8 @@ class TabCompleteTests(unittest.TestCase):
     def test_recon_value_completion_inside_brackets(self):
         items = completion_items("recon[strategy=qu")
 
-        self.assertIn(("quiet, ", "recon strategy"), items)
+        self.assertIn(("quiet, ", "recon profile or scan strategy"), items)
+        self.assertIn(("surface, ", "recon profile or scan strategy"), completion_items("recon[strategy=su"))
 
     def test_recon_probe_value_completion_inside_brackets(self):
         items = completion_items("recon[probe=fi")
