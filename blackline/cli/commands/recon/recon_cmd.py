@@ -11,7 +11,8 @@ from urllib.parse import urlsplit
 from blackline.cli.commands.system.jobs_cmd import append_job_result, derive_completion_state, step_completion_state
 from blackline.cli.ui.colors import colorize
 from blackline.config.tool_loader import get_tool_config
-from blackline.core.recon import InvalidReconTargetError, build_recon_pipeline
+from blackline.core.recon import InvalidReconTargetError, build_evidence_graph, build_recon_pipeline
+from blackline.core.recon.outcomes import classify_result
 from blackline.cli.ui.display import error, result, warn, write_line, write_segments
 from blackline.engine.runner import normalize_expression, parse_expression, run_expression
 from blackline.engine.executor import ExecutionProgress
@@ -67,6 +68,7 @@ def handle_recon(
                 tool=str(getattr(step, "tool", "")),
                 ok=bool(getattr(step, "ok", False)),
                 payload=payload,
+                outcome=str(getattr(step, "outcome", "")),
             )
         )
         total_elapsed_seconds += _step_elapsed_seconds(payload)
@@ -103,6 +105,10 @@ def handle_recon(
         return False
 
     if last_nmap_payload or step_statuses:
+        if not run.cancelled:
+            evidence = build_evidence_graph(run.context.params.get("target", ""), report_payloads)
+            report_payloads["correlation"] = evidence.to_dict()
+            record_evidence_graph(active_job, evidence.to_dict(), jobs_root=jobs_root)
         render_recon_report(report_payloads, use_color=use_color)
         render_recon_summary(
             completion_state,
@@ -157,7 +163,7 @@ class ReconProgressRenderer:
             return
         if cancelled:
             self.states = ["skipped" if state == "pending" else state for state in self.states]
-        completed = sum(state in {"done", "warning", "failed", "skipped"} for state in self.states)
+        completed = sum(state in {"done", "negative", "warning", "failed", "skipped"} for state in self.states)
         headline = "completed" if completed == self.total else "finished"
         self._render(f"{completed} checks {headline}")
 
@@ -195,34 +201,14 @@ def _progress_state(result: object) -> str:
     if result is None:
         return "failed"
     payload = getattr(result, "payload", {})
-    if getattr(result, "tool", "") == "http" and _http_findings_are_closed(payload):
-        return "done"
-    if isinstance(payload, dict) and payload.get("skipped"):
-        return "skipped"
-    if not bool(getattr(result, "ok", False)):
-        return "failed"
-    if isinstance(payload, dict):
-        warnings = payload.get("warnings", [])
-        findings = payload.get("findings", [])
-        if isinstance(warnings, list) and warnings:
-            return "warning"
-        if isinstance(findings, list) and any(
-            isinstance(finding, dict) and not finding.get("ok", False) for finding in findings
-        ):
-            return "warning"
-    return "done"
-
-
-def _http_findings_are_closed(payload: object) -> bool:
-    """Return True for a successful negative HTTP observation."""
-    if not isinstance(payload, dict):
-        return False
-    findings = payload.get("findings", [])
-    return isinstance(findings, list) and bool(findings) and all(
-        isinstance(finding, dict)
-        and finding.get("status_code") is None
-        and "connection refused" in str(finding.get("error", "")).lower()
-        for finding in findings
+    explicit = str(getattr(result, "outcome", "")).strip().lower()
+    if explicit:
+        return explicit
+    return classify_result(
+        tool=str(getattr(result, "tool", "")),
+        ok=bool(getattr(result, "ok", False)),
+        payload=payload if isinstance(payload, dict) else {},
+        error=str(getattr(result, "error", "")),
     )
 
 
@@ -230,6 +216,7 @@ def _progress_color(state: str) -> str:
     """Return the deliberately restrained color for a checklist state."""
     return {
         "done": "green",
+        "negative": "cyan",
         "running": "yellow",
         "warning": "yellow",
         "failed": "red",
@@ -313,6 +300,7 @@ def render_recon_report(payloads: dict[str, dict], *, use_color: bool | None = N
     fingerprint = payloads.get("fingerprint", {})
     tls = payloads.get("tls", {})
     rdap = payloads.get("rdap", {})
+    correlation = payloads.get("correlation", {})
     nmap = payloads.get("nmap", {})
 
     if ipintel:
@@ -327,6 +315,8 @@ def render_recon_report(payloads: dict[str, dict], *, use_color: bool | None = N
         _render_tls_section(tls, use_color=use_color)
     if rdap:
         _render_rdap_sections(rdap, use_color=use_color)
+    if correlation:
+        _render_correlation_section(correlation, use_color=use_color)
     if nmap:
         _render_services_section(nmap, use_color=use_color)
         _render_system_section(nmap, use_color=use_color)
@@ -464,6 +454,41 @@ def _render_rdap_sections(payload: dict, *, use_color: bool | None = None) -> No
         _render_section_header("rdap", providers, use_color=use_color)
         _render_field("status", "unavailable", use_color=use_color)
         write_line(use_color=use_color)
+
+
+def _render_correlation_section(payload: dict, *, use_color: bool | None = None) -> None:
+    """Render the useful cross-tool joins, retaining individual claim provenance in storage."""
+    claims = payload.get("claims", [])
+    if not isinstance(claims, list):
+        return
+    normalized = [claim for claim in claims if isinstance(claim, dict)]
+    if not normalized:
+        return
+    sources = tuple(dict.fromkeys(
+        str(source)
+        for claim in normalized
+        for source in claim.get("sources", [])
+        if str(source).strip()
+    ))
+    _render_section_header("correlation", sources, use_color=use_color)
+    _render_field("target", str(payload.get("target") or "unknown"), use_color=use_color)
+    _render_correlation_values("addresses", normalized, "resolves_to", use_color=use_color)
+    _render_correlation_values("ownership", normalized, "owned_by", use_color=use_color)
+    _render_correlation_values("asn", normalized, "announced_by", use_color=use_color)
+    _render_correlation_values("web edge", normalized, "served_by", use_color=use_color)
+    _render_correlation_values("framework", normalized, "uses_framework", use_color=use_color)
+    _render_correlation_values("tls names", normalized, "presents_tls_name", use_color=use_color)
+    write_line(use_color=use_color)
+
+
+def _render_correlation_values(label: str, claims: list[dict], predicate: str, *, use_color: bool | None) -> None:
+    values = tuple(dict.fromkeys(
+        str(claim.get("value", "")).strip()
+        for claim in claims
+        if claim.get("predicate") == predicate and str(claim.get("value", "")).strip()
+    ))
+    if values:
+        _render_field(label, ", ".join(values), use_color=use_color)
 
 
 def _render_services_section(payload: dict, *, use_color: bool | None = None) -> None:
@@ -883,6 +908,28 @@ def record_job_result(
         "payload": payload,
     }
     append_job_result(active_job, entry, jobs_root=jobs_root)
+
+
+def record_evidence_graph(active_job: str, payload: dict[str, object], *, jobs_root: Path | None = None) -> None:
+    """Persist the derived graph as a first-class job result, without re-running a tool."""
+    if not active_job:
+        return
+    claims = payload.get("claims", [])
+    claim_count = len(claims) if isinstance(claims, list) else 0
+    append_job_result(
+        active_job,
+        {
+            "recorded_at": datetime.now().isoformat(timespec="seconds"),
+            "module": "recon",
+            "tool": "evidence",
+            "action": "correlation",
+            "ok": True,
+            "error": "",
+            "summary": {"target": payload.get("target", ""), "claim_count": claim_count},
+            "payload": {**payload, "warnings": [], "elapsed_seconds": 0.0},
+        },
+        jobs_root=jobs_root,
+    )
 
 
 def _port_scan_summary_text(open_count: int, filtered_count: int, interesting_count: int) -> str:
