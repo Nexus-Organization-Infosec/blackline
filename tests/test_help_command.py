@@ -44,7 +44,7 @@ class HelpCommandTests(unittest.TestCase):
         self.assertIn("recon[target=<ip>,strategy=<mode>,probe=<depth>]", text)
         self.assertIn("arguments\n─────────", text)
         self.assertIn("target    target ip or domain", text)
-        self.assertIn("strategy  balanced, quiet, fast, deep, or udp", text)
+        self.assertIn("strategy  surface, balanced, quiet, fast, deep, or udp", text)
         self.assertIn("examples\n────────", text)
         self.assertIn("recon[target=example.com,strategy=quiet,top_ports=20]", text)
 
