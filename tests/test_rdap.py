@@ -4,34 +4,15 @@ from contextlib import redirect_stdout
 
 from blackline.cli.commands.recon.recon_cmd import render_recon_report
 from blackline.tools.intel.rdap import resolve_rdap
+from tests.fixture_loader import read_json
 
 
 class RdapTests(unittest.TestCase):
     def test_rdap_normalizes_registration_and_network_ownership(self):
         def fetcher(url: str, timeout: float):
             if "/domain/" in url:
-                return {
-                    "status_code": 200,
-                    "data": {
-                        "ldhName": "owasp.org",
-                        "status": ["active"],
-                        "events": [
-                            {"eventAction": "registration", "eventDate": "2001-09-27T00:00:00Z"},
-                            {"eventAction": "expiration", "eventDate": "2030-09-27T00:00:00Z"},
-                        ],
-                        "entities": [{"roles": ["registrar"], "vcardArray": ["vcard", [["fn", {}, "text", "Example Registrar"]]]}],
-                    },
-                }
-            return {
-                "status_code": 200,
-                "data": {
-                    "startAddress": "172.66.157.0",
-                    "endAddress": "172.66.157.255",
-                    "name": "CLOUDFLARENET",
-                    "arin_originas0_originautnums": [13335],
-                    "entities": [{"roles": ["registrant"], "vcardArray": ["vcard", [["fn", {}, "text", "Cloudflare, Inc."]]]}],
-                },
-            }
+                return {"status_code": 200, "data": read_json("rdap", "owasp.org.json")}
+            return {"status_code": 200, "data": read_json("rdap", "172.66.157.115.json")}
 
         result = resolve_rdap(domain="owasp.org", address="172.66.157.115", fetcher=fetcher)
 
