@@ -517,9 +517,12 @@ Keep these high-level and user-friendly.
 Controls how much recon is performed.
 
 ```text
-fast       minimal checks
-balanced   default useful recon
-deep       slower, more complete
+surface    passive registration and ordinary web evidence; no port scan
+balanced   default full evidence set
+deep       full evidence set with deep network intelligence and aggressive scanning
+
+`fast` remains a compatibility alias for the surface evidence set. `quiet` and
+`udp` retain their scan-specific behavior while using the balanced evidence set.
 ```
 
 ### `speed`
