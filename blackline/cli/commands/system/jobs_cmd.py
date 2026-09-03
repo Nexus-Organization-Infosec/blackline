@@ -14,6 +14,7 @@ from blackline.cli.commands.utils.shell_cmds import ShellState
 from blackline.cli.ui.display import error, info, result, write_line, write_segments
 from blackline.config.tool_loader import load_tools_config
 from blackline.core.recon import InvalidReconTargetError, build_recon_pipeline
+from blackline.core.recon.outcomes import classify_result, completion_state_for
 
 ID_ALPHABET = string.ascii_uppercase + string.digits
 MANUAL_MODULE = "manual"
@@ -97,13 +98,13 @@ def handle_new(
 
 def handle_show(
     state: ShellState,
-    identifier: str = "",
+    selector: str = "",
     *,
     jobs_root: Path | None = None,
     use_color: bool | None = None,
 ) -> None:
-    """Show the active job."""
-    target_id = normalize_job_id(identifier) or state.active_job
+    """Show a job summary, one report section, raw evidence, or source provenance."""
+    target_id, view = _parse_show_selector(selector, active_job=state.active_job)
     if not target_id:
         info("no active job", use_color=use_color)
         return
@@ -112,7 +113,137 @@ def handle_show(
     if not job:
         error(f"job not found: #{target_id}", use_color=use_color)
         return
-    render_job(job, use_color=use_color)
+    if not view:
+        render_job(job, use_color=use_color)
+    elif view == "sources":
+        render_job_sources(job, use_color=use_color)
+    elif view == "raw":
+        render_job_raw(job, use_color=use_color)
+    else:
+        render_job_section(job, view, use_color=use_color)
+
+
+def _parse_show_selector(selector: str, *, active_job: str) -> tuple[str, str]:
+    """Parse ``show [#ID] [view]`` without treating a view as a job identifier."""
+    tokens = selector.strip().split(maxsplit=1)
+    if tokens and tokens[0].startswith("#"):
+        return normalize_job_id(tokens[0]) or active_job, tokens[1].strip().lower() if len(tokens) > 1 else ""
+    return active_job, selector.strip().lower()
+
+
+def render_job_sources(job: Job, *, use_color: bool | None = None) -> None:
+    """Render each persisted result section with its exact provider(s)."""
+    write_line("sources", color="cyan", use_color=use_color)
+    write_line("───────", color="muted", use_color=use_color)
+    rendered = False
+    for entry in job.results:
+        if not isinstance(entry, dict):
+            continue
+        tool = str(entry.get("tool", "")).strip()
+        payload = _mapping(entry.get("payload"))
+        providers = _entry_sources(payload)
+        if tool and providers:
+            write_line(f"{tool.ljust(13)}: {', '.join(providers)}", use_color=use_color)
+            rendered = True
+    if not rendered:
+        write_line("no source data recorded", color="muted", use_color=use_color)
+    write_line(use_color=use_color)
+
+
+def render_job_raw(job: Job, *, use_color: bool | None = None) -> None:
+    """Render stored raw artifacts only when the operator explicitly asks for them."""
+    rendered = False
+    for entry in job.results:
+        if not isinstance(entry, dict):
+            continue
+        tool = str(entry.get("tool", "")).strip() or "unknown"
+        payload = _mapping(entry.get("payload"))
+        artifacts: list[tuple[str, object]] = []
+        raw_output = payload.get("raw_output")
+        if isinstance(raw_output, str) and raw_output.strip():
+            artifacts.append(("raw_output", raw_output.strip()))
+        raw = payload.get("raw")
+        if isinstance(raw, dict) and raw:
+            artifacts.append(("raw", raw))
+        if not artifacts:
+            continue
+        rendered = True
+        write_line(f"raw {tool}", color="cyan", use_color=use_color)
+        write_line("─" * (4 + len(tool)), color="muted", use_color=use_color)
+        for label, artifact in artifacts:
+            if label == "raw":
+                write_line(json.dumps(artifact, indent=2, sort_keys=True), use_color=use_color)
+            else:
+                write_line(str(artifact), use_color=use_color)
+        write_line(use_color=use_color)
+    if not rendered:
+        info("no raw artifacts recorded", use_color=use_color)
+
+
+def render_job_section(job: Job, view: str, *, use_color: bool | None = None) -> None:
+    """Render one persisted recon section using the same curated report renderer."""
+    tool = _SHOW_SECTION_TO_TOOL.get(view)
+    if tool is None:
+        error("unknown show view: " + view + " (use sources, raw, or a report section)", use_color=use_color)
+        return
+    entry = next((entry for entry in reversed(job.results) if isinstance(entry, dict) and entry.get("tool") == tool), None)
+    if entry is None:
+        info(f"no {view} data recorded for #{job.id}", use_color=use_color)
+        return
+    payload = _mapping(entry.get("payload"))
+    # Import lazily: recon itself imports the jobs module for persistence.
+    from blackline.cli.commands.recon import recon_cmd
+
+    exact_renderers = {
+        "network": recon_cmd._render_network_section,
+        "web": recon_cmd._render_web_section,
+        "fingerprint": recon_cmd._render_web_fingerprint_section,
+        "tls": recon_cmd._render_tls_section,
+        "services": recon_cmd._render_services_section,
+        "system": recon_cmd._render_system_section,
+    }
+    renderer = exact_renderers.get(view)
+    if renderer is not None:
+        renderer(payload, use_color=use_color)
+        return
+    report_key = "correlation" if tool == "evidence" else tool
+    recon_cmd.render_recon_report({report_key: payload}, use_color=use_color)
+
+
+def _entry_sources(payload: dict[str, object]) -> tuple[str, ...]:
+    sources: list[str] = []
+    provider = str(payload.get("provider", "")).strip()
+    parser = str(payload.get("certificate_parser", "")).strip()
+    if provider:
+        sources.append(provider)
+    if parser:
+        sources.append(parser)
+    claims = payload.get("claims", [])
+    if isinstance(claims, list):
+        for claim in claims:
+            if isinstance(claim, dict):
+                claim_sources = claim.get("sources", [])
+                if isinstance(claim_sources, list):
+                    sources.extend(str(source).strip() for source in claim_sources if str(source).strip())
+    return tuple(dict.fromkeys(sources))
+
+
+_SHOW_SECTION_TO_TOOL = {
+    "dns": "dns",
+    "network": "ipintel",
+    "ipintel": "ipintel",
+    "web": "http",
+    "http": "http",
+    "fingerprint": "fingerprint",
+    "web fingerprint": "fingerprint",
+    "tls": "tls",
+    "registration": "rdap",
+    "ownership": "rdap",
+    "rdap": "rdap",
+    "services": "nmap",
+    "system": "nmap",
+    "correlation": "evidence",
+}
 
 
 def handle_jobs(*, jobs_root: Path | None = None, use_color: bool | None = None) -> None:
@@ -289,6 +420,8 @@ def append_job_result(identifier: str, entry: dict[str, object], jobs_root: Path
     if job is None:
         return False
 
+    entry = dict(entry)
+    entry.setdefault("outcome", _step_outcome_from_entry(entry))
     step = _normalize_step_entry(entry)
     steps = [*job.steps, step]
     summary = _build_job_summary(
@@ -314,31 +447,10 @@ def append_job_result(identifier: str, entry: dict[str, object], jobs_root: Path
     return True
 
 
-def step_completion_state(*, tool: str, ok: bool, payload: dict[str, object]) -> str:
+def step_completion_state(*, tool: str, ok: bool, payload: dict[str, object], outcome: str = "") -> str:
     """Return the normalized completion state for one executed recon step."""
-    if not ok:
-        return "failed"
-
-    warnings = payload.get("warnings", [])
-    if isinstance(warnings, list) and warnings:
-        return "completed_with_warnings"
-
-    if tool == "http":
-        findings = payload.get("findings", [])
-        if isinstance(findings, list):
-            any_ok = False
-            any_failed = False
-            for finding in findings:
-                if not isinstance(finding, dict):
-                    continue
-                if bool(finding.get("ok", False)):
-                    any_ok = True
-                else:
-                    any_failed = True
-            if any_ok and any_failed:
-                return "completed_with_warnings"
-
-    return "completed"
+    result_outcome = outcome or classify_result(tool=tool, ok=ok, payload=payload)
+    return completion_state_for(result_outcome)
 
 
 def derive_completion_state(statuses: list[str]) -> str:
@@ -482,12 +594,14 @@ def _normalize_step_entry(entry: dict[str, object]) -> dict[str, object]:
     recorded_at = str(entry.get("recorded_at", datetime.now().isoformat(timespec="seconds")))
     tool = str(entry.get("tool", ""))
     status = _step_status_from_entry(entry)
+    outcome = _step_outcome_from_entry(entry)
     command = payload.get("command", [])
     command_text = " ".join(str(item) for item in command) if isinstance(command, list) else str(command)
 
     return {
         "name": _step_name(tool, str(entry.get("action", ""))),
         "status": status,
+        "outcome": outcome,
         "error": str(entry.get("error", "")),
         "command": command_text,
         "summary": summary,
@@ -515,6 +629,17 @@ def _step_status_from_entry(entry: dict[str, object]) -> str:
         tool=str(entry.get("tool", "")),
         ok=bool(entry.get("ok", False)),
         payload=payload,
+        outcome=str(entry.get("outcome", "")),
+    )
+
+
+def _step_outcome_from_entry(entry: dict[str, object]) -> str:
+    payload = _mapping(entry.get("payload"))
+    return str(entry.get("outcome", "")).strip() or classify_result(
+        tool=str(entry.get("tool", "")),
+        ok=bool(entry.get("ok", False)),
+        payload=payload,
+        error=str(entry.get("error", "")),
     )
 
 
@@ -550,12 +675,20 @@ def _build_job_summary(
     elapsed_seconds = 0.0
     host_status = ""
     completed_steps = 0
+    negative_steps = 0
+    skipped_steps = 0
     warning_steps = 0
     failed_steps = 0
     for step in step_list:
         step_status = str(step.get("status", "initialized"))
+        outcome = str(step.get("outcome", "done"))
         if step_status == "completed":
-            completed_steps += 1
+            if outcome == "negative":
+                negative_steps += 1
+            elif outcome == "skipped":
+                skipped_steps += 1
+            else:
+                completed_steps += 1
         elif step_status == "completed_with_warnings":
             warning_steps += 1
         elif step_status == "failed":
@@ -586,6 +719,10 @@ def _build_job_summary(
         summary["elapsed_seconds"] = elapsed_seconds
     if completed_steps:
         summary["completed_steps"] = completed_steps
+    if negative_steps:
+        summary["negative_steps"] = negative_steps
+    if skipped_steps:
+        summary["skipped_steps"] = skipped_steps
     if warning_steps:
         summary["warning_steps"] = warning_steps
     if failed_steps:
