@@ -29,6 +29,7 @@ class RdapResult:
     organization: str = ""
     asn: str = ""
     provider: str = "rdap.org"
+    negative_observation: bool = False
     warnings: tuple[str, ...] = field(default_factory=tuple)
     raw: dict[str, object] = field(default_factory=dict)
     error: str = ""
@@ -91,6 +92,7 @@ def resolve_rdap(
         network=ownership["network"],
         organization=ownership["organization"],
         asn=ownership["asn"],
+        negative_observation=successful_absence,
         warnings=tuple(warnings),
         raw=raw,
         error="" if completed_lookup or successful_absence else (warnings[0] if warnings else "RDAP lookup failed"),
