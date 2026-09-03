@@ -1,5 +1,6 @@
 import unittest
 
+from tests.fixture_loader import read_json
 from blackline.core.recon.models import ReconTarget
 from blackline.core.recon.steps.dns import execute_dns_step
 from blackline.tools.dns import resolver
@@ -11,17 +12,7 @@ class DnsStepTests(unittest.TestCase):
 
         def provider(host, record_types):
             requested.extend(record_types)
-            return {
-                "A": ["93.184.216.34"],
-                "AAAA": ["2606:2800:220:1:248:1893:25c8:1946"],
-                "CNAME": [],
-                "MX": [],
-                "NS": ["a.iana-servers.net", "b.iana-servers.net"],
-                "TXT": ["v=spf1 -all"],
-                "SOA": ["a.iana-servers.net hostmaster.iana.org 1 2 3 4 5"],
-                "CAA": ["0 issue letsencrypt.org"],
-                "SRV": [],
-            }
+            return read_json("dns", "example.com.json")
 
         lookup = resolver.resolve_dns(
             "example.com",
