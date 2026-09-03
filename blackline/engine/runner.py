@@ -7,6 +7,7 @@ import re
 from typing import Callable
 
 from blackline.core.recon.pipeline import build_recon_pipeline
+from blackline.core.recon.outcomes import outcome_is_success
 from blackline.engine.executor import ExecutionControl, ExecutionProgress, StepResult, execute_plan
 from blackline.engine.planner import ExecutionPlan, build_plan
 from blackline.engine.context import ExecutionContext
@@ -26,7 +27,7 @@ class RunResult:
 
     @property
     def ok(self) -> bool:
-        return (not self.cancelled) and all(result.ok for result in self.results)
+        return (not self.cancelled) and all(outcome_is_success(result.outcome) for result in self.results)
 
 
 def run_expression(
