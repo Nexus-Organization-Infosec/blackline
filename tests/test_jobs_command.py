@@ -116,6 +116,22 @@ class JobsCommandTests(unittest.TestCase):
 
         self.assertIn("correlation  (source: dnspython)", output.getvalue())
 
+    def test_show_formatted_replays_saved_final_recon_report(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            jobs_root = Path(tmp)
+            state = self._job_with_evidence(jobs_root)
+            output = io.StringIO()
+            with redirect_stdout(output):
+                handle_show(state, "#A12F formatted", jobs_root=jobs_root, use_color=False)
+
+        text = output.getvalue()
+        self.assertIn("[info] target example.com", text)
+        self.assertIn("dns  (source: dnspython)", text)
+        self.assertIn("tls  (sources: python ssl, openssl)", text)
+        self.assertIn("correlation  (source: dnspython)", text)
+        self.assertIn("[result] recon complete -> #A12F", text)
+        self.assertNotIn("DNS raw artifact", text)
+
     def test_parse_job_expression(self):
         self.assertEqual(
             parse_job_expression("recon[target=192.168.1.1,ports=80-443]"),
