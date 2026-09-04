@@ -118,7 +118,7 @@ class TabCompleteTests(unittest.TestCase):
             tab_complete.list_jobs.__globals__["default_jobs_root"] = fake_default_jobs_root
             try:
                 self.assertEqual(show_target_replacements("show "), [
-                    "sources", "raw", "dns", "network", "web", "fingerprint", "tls", "rdap", "services", "system", "correlation", "#A12F", "#B93K",
+                    "formatted", "sources", "raw", "dns", "network", "web", "fingerprint", "tls", "rdap", "services", "system", "correlation", "#A12F", "#B93K",
                 ])
                 self.assertEqual(show_target_replacements("show #B"), ["#B93K"])
                 self.assertIn(("#A12F", "manual initialized"), completion_items("show #A"))
