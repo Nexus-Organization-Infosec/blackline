@@ -119,6 +119,8 @@ def handle_show(
         render_job_sources(job, use_color=use_color)
     elif view == "raw":
         render_job_raw(job, use_color=use_color)
+    elif view == "formatted":
+        render_job_formatted(job, use_color=use_color)
     else:
         render_job_section(job, view, use_color=use_color)
 
@@ -180,11 +182,45 @@ def render_job_raw(job: Job, *, use_color: bool | None = None) -> None:
         info("no raw artifacts recorded", use_color=use_color)
 
 
+def render_job_formatted(job: Job, *, use_color: bool | None = None) -> None:
+    """Replay the saved final recon presentation without raw or live-progress output."""
+    if job.module != "recon":
+        info(f"no formatted recon output recorded for #{job.id}", use_color=use_color)
+        return
+    payloads: dict[str, dict] = {}
+    last_nmap_payload: dict[str, object] = {}
+    for entry in job.results:
+        if not isinstance(entry, dict):
+            continue
+        tool = str(entry.get("tool", "")).strip()
+        payload = _mapping(entry.get("payload"))
+        if not tool or not payload:
+            continue
+        payloads["correlation" if tool == "evidence" else tool] = payload
+        if tool == "nmap" and bool(entry.get("ok", False)):
+            last_nmap_payload = payload
+    if not payloads:
+        info(f"no formatted recon output recorded for #{job.id}", use_color=use_color)
+        return
+
+    # Import lazily: recon imports this module to persist its results.
+    from blackline.cli.commands.recon import recon_cmd
+
+    recon_cmd.render_recon_context(job.params, use_color=use_color)
+    recon_cmd.render_recon_report(payloads, use_color=use_color)
+    recon_cmd.render_recon_summary(
+        job.status,
+        nmap_payload=last_nmap_payload,
+        active_job=job.id,
+        use_color=use_color,
+    )
+
+
 def render_job_section(job: Job, view: str, *, use_color: bool | None = None) -> None:
     """Render one persisted recon section using the same curated report renderer."""
     tool = _SHOW_SECTION_TO_TOOL.get(view)
     if tool is None:
-        error("unknown show view: " + view + " (use sources, raw, or a report section)", use_color=use_color)
+        error("unknown show view: " + view + " (use formatted, sources, raw, or a report section)", use_color=use_color)
         return
     entry = next((entry for entry in reversed(job.results) if isinstance(entry, dict) and entry.get("tool") == tool), None)
     if entry is None:
@@ -229,6 +265,7 @@ def _entry_sources(payload: dict[str, object]) -> tuple[str, ...]:
 
 
 _SHOW_SECTION_TO_TOOL = {
+    "formatted": "formatted",
     "dns": "dns",
     "network": "ipintel",
     "ipintel": "ipintel",
