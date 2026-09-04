@@ -16,6 +16,7 @@ from blackline.cli.commands.system.jobs_cmd import list_jobs
 
 STATIC_COMMANDS = ("quit",)
 SHOW_VIEWS = (
+    ("formatted", "saved final recon report"),
     ("sources", "job provenance"),
     ("raw", "stored raw artifacts"),
     ("dns", "DNS report section"),
