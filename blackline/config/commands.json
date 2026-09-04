@@ -94,10 +94,10 @@
         },
         {
           "name": "show",
-          "description": "inspect a job summary, report section, sources, or raw evidence",
-          "usage": "show [#ID] [sources|raw|section]",
+          "description": "inspect a job summary, formatted report, section, sources, or raw evidence",
+          "usage": "show [#ID] [formatted|sources|raw|section]",
           "arguments": [["id", "optional job identifier"]],
-          "examples": ["show", "show sources", "show raw", "show tls", "show #A12F sources"]
+          "examples": ["show", "show formatted", "show sources", "show raw", "show tls", "show #A12F formatted"]
         },
         {
           "name": "jobs",
