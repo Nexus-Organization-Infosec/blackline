@@ -13,6 +13,7 @@ from blackline.cli.commands.utils.shell_cmds import (
     handle_version,
 )
 from blackline.cli.core_shell import dispatch_line, execute_shell_line
+from blackline.templates import TemplateRegistry, TemplateStorage
 
 
 class ShellCommandTests(unittest.TestCase):
@@ -78,13 +79,38 @@ class ShellCommandTests(unittest.TestCase):
             self.assertIn("1  version", text)
             self.assertIn("2  history", text)
 
-    def test_dispatch_placeholder_for_planned_commands(self):
+    def test_dispatch_runs_a_loaded_template(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "hello.bline"
+            source.write_text("analyze\n", encoding="utf-8")
+            registry = TemplateRegistry(storage=TemplateStorage(root / "registry.json"))
+            registry.register(source)
+            output = io.StringIO()
+
+            with redirect_stdout(output):
+                dispatch_line("run hello", ShellState(template_registry=registry))
+
+        self.assertIn("[run] hello completed", output.getvalue())
+
+    def test_dispatch_bare_load_reports_missing_template_path(self):
         output = io.StringIO()
 
         with redirect_stdout(output):
-            dispatch_line("run recon", ShellState())
+            dispatch_line("load", ShellState())
 
-        self.assertEqual(output.getvalue().strip(), "[warn] run is planned but not wired to the engine yet")
+        self.assertIn("[error] load requires a template path", output.getvalue())
+
+    def test_exit_leaves_an_active_template_before_exiting_shell(self):
+        state = ShellState(active_template="clt-language-showcase")
+        output = io.StringIO()
+
+        with redirect_stdout(output):
+            should_exit = dispatch_line("exit", state)
+
+        self.assertFalse(should_exit)
+        self.assertEqual(state.active_template, "")
+        self.assertEqual(output.getvalue().strip(), "[info] left template clt-language-showcase")
 
     def test_execute_shell_line_adds_spacing_around_command_output(self):
         output = io.StringIO()
