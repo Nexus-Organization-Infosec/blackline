@@ -81,7 +81,7 @@ def create_prompt_session() -> Any | None:
     )
 
 
-def prompt_fragments(active_job: str = "", *, elevated: bool = False) -> PromptFragments:
+def prompt_fragments(active_job: str = "", *, active_template: str = "", elevated: bool = False) -> PromptFragments:
     """Return a prompt-toolkit-native prompt."""
     symbol = "#" if elevated else "❯"
     if active_job:
@@ -89,6 +89,13 @@ def prompt_fragments(active_job: str = "", *, elevated: bool = False) -> PromptF
             ("class:prompt.name", "bl"),
             ("class:prompt.bracket", " ["),
             ("class:prompt.job", f"#{active_job}"),
+            ("class:prompt.arrow", f"] {symbol} "),
+        ]
+    if active_template:
+        return [
+            ("class:prompt.name", "bl"),
+            ("class:prompt.bracket", " ["),
+            ("class:prompt.job", active_template),
             ("class:prompt.arrow", f"] {symbol} "),
         ]
     return [
