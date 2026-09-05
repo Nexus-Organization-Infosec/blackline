@@ -99,6 +99,7 @@ def _short_version(version: str) -> str:
 def prompt_line(
     active_job: str = "",
     *,
+    active_template: str = "",
     elevated: bool = False,
     use_color: bool | None = None,
     readline_safe: bool = True,
@@ -112,6 +113,13 @@ def prompt_line(
             colorize("bl", "green", enabled=use_color, readline_safe=readline_safe)
             + colorize(" [", "white", enabled=use_color, readline_safe=readline_safe)
             + colorize(f"#{active_job}", "cyan", enabled=use_color, readline_safe=readline_safe)
+            + colorize(f"] {symbol} ", "yellow", enabled=use_color, readline_safe=readline_safe)
+        )
+    if active_template:
+        return (
+            colorize("bl", "green", enabled=use_color, readline_safe=readline_safe)
+            + colorize(" [", "white", enabled=use_color, readline_safe=readline_safe)
+            + colorize(active_template, "cyan", enabled=use_color, readline_safe=readline_safe)
             + colorize(f"] {symbol} ", "yellow", enabled=use_color, readline_safe=readline_safe)
         )
     return (
