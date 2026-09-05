@@ -15,6 +15,7 @@ class StructureTests(unittest.TestCase):
             "cli/commands/recon",
             "cli/commands/network",
             "cli/commands/utils",
+            "cli/commands/templates",
             "cli/parser/intent_parser.py",
             "cli/parser/tokenizer.py",
             "vector/vector.py",
@@ -63,6 +64,9 @@ class StructureTests(unittest.TestCase):
             "utils/exec.py",
             "utils/string_matcher.py",
             "utils/tab_complete.py",
+            "templates/models.py",
+            "templates/registry.py",
+            "templates/storage.py",
         ]
 
         for path in expected:
