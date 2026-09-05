@@ -28,6 +28,8 @@ class HelpCommandTests(unittest.TestCase):
         self.assertIn("recon         target discovery (ip, url, email, etc.)", text)
         self.assertIn("&   and-sequence", text)
         self.assertIn("//  parallel", text)
+        self.assertNotIn("SYSTEMS", text)
+        self.assertNotIn("clt", text.lower())
         self.assertIn("type 'help <command>' for details", text)
 
     def test_command_help_renders_details(self):
