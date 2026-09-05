@@ -22,6 +22,7 @@ class HelpItem:
 
     name: str
     description: str
+    kind: str = "command"
     usage: str = ""
     long_description: str = ""
     arguments: tuple[tuple[str, str], ...] = ()
@@ -230,6 +231,7 @@ def _item_from_dict(raw: dict[str, Any]) -> HelpItem:
     return HelpItem(
         name=str(raw.get("name", "")),
         description=str(raw.get("description", "")),
+        kind=str(raw.get("kind", "command")).strip().lower() or "command",
         usage=str(raw.get("usage", "")),
         long_description=str(raw.get("long_description", "")),
         arguments=tuple((str(key), str(value)) for key, value in raw.get("arguments", [])),
