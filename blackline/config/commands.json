@@ -23,42 +23,42 @@
         {
           "name": "run",
           "kind": "command",
-          "description": "execute current module or command",
-          "usage": "run <command>",
-          "arguments": [],
-          "examples": ["run recon[target=192.168.1.1]"]
+          "description": "execute an active or named template",
+          "usage": "run [template][key=value,...]",
+          "arguments": [["template", "optional registered template name"], ["inputs", "optional key=value template inputs"]],
+          "examples": ["run", "run web-audit", "run web-audit[target=192.168.1.1]"]
         },
         {
           "name": "use",
           "kind": "command",
-          "description": "load module(s) temporarily",
-          "usage": "use <module>",
-          "arguments": [["module", "module name or path"]],
-          "examples": ["use recon"]
+          "description": "activate one registered template",
+          "usage": "use <template>",
+          "arguments": [["template", "registered template name"]],
+          "examples": ["use web-audit"]
         },
         {
           "name": "load",
           "kind": "command",
-          "description": "persist module into session",
-          "usage": "load <module>",
-          "arguments": [["module", "module name or path"]],
-          "examples": ["load recon"]
+          "description": "register and validate a .bline template",
+          "usage": "load <path[.bline]>",
+          "arguments": [["path", "source path to a .bline template; extension may be omitted"]],
+          "examples": ["load ./web-audit.bline", "load web-audit"]
         },
         {
           "name": "list",
           "kind": "command",
-          "description": "list items in current context",
-          "usage": "list [context]",
-          "arguments": [["context", "optional context to inspect"]],
-          "examples": ["list tools"]
+          "description": "list registered templates",
+          "usage": "list [templates]",
+          "arguments": [["templates", "optional explicit template resource"]],
+          "examples": ["list templates"]
         },
         {
           "name": "edit",
           "kind": "command",
-          "description": "open module in editor",
-          "usage": "edit <module>",
-          "arguments": [["module", "module name or path"]],
-          "examples": ["edit recon"]
+          "description": "open a template source in the configured editor",
+          "usage": "edit [template]",
+          "arguments": [["template", "optional registered or active template name"]],
+          "examples": ["edit web-audit", "use web-audit", "edit"]
         },
         {
           "name": "delete",
