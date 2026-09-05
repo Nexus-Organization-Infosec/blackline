@@ -19,6 +19,7 @@ from blackline.cli.commands.system.jobs_cmd import (
 )
 from blackline.cli.commands.recon.recon_cmd import handle_recon, validate_recon_expression
 from blackline.cli.commands.network.network_cmd import handle_network
+from blackline.cli.commands.templates.template_cmd import handle_edit, handle_list_templates, handle_load, handle_run, handle_use
 from blackline.cli.commands.utils.shell_cmds import (
     ShellState,
     handle_clear,
@@ -29,7 +30,7 @@ from blackline.cli.commands.utils.shell_cmds import (
     record_history,
     handle_version,
 )
-from blackline.cli.ui.display import error, result, write_segments
+from blackline.cli.ui.display import error, info, result, write_segments
 from blackline.cli.ui.elements import prompt_line
 from blackline.cli.ui.live_input import create_prompt_session, prompt_fragments
 from blackline.engine.planner import PlanStep, build_plan
@@ -37,7 +38,7 @@ from blackline.engine.runner import parse_expression
 from blackline.tools.network.nmap import NmapRequest, requires_sudo_for_request
 from blackline.utils.tab_complete import ReadlineCompleter
 
-PLANNED_COMMANDS = {"run", "use", "load", "list", "edit", "update"}
+PLANNED_COMMANDS = {"update"}
 _COMPLETER: ReadlineCompleter | None = None
 
 
@@ -52,9 +53,9 @@ def run_shell() -> int:
         try:
             refresh_sudo_state(state)
             if session is None:
-                line = input(prompt_line(state.active_job, elevated=is_elevated(state))).strip()
+                line = input(prompt_line(state.active_job, active_template=state.active_template, elevated=is_elevated(state))).strip()
             else:
-                line = session.prompt(prompt_fragments(state.active_job, elevated=is_elevated(state))).strip()
+                line = session.prompt(prompt_fragments(state.active_job, active_template=state.active_template, elevated=is_elevated(state))).strip()
         except KeyboardInterrupt:
             print()
             continue
@@ -162,6 +163,26 @@ def dispatch_line(line: str, state: ShellState | None = None) -> bool:
         handle_network()
         return False
 
+    if command == "list" or command == "list templates":
+        handle_list_templates(state)
+        return False
+
+    if command == "load" or command.startswith("load "):
+        handle_load(stripped.removeprefix("load").strip(), state)
+        return False
+
+    if command == "use" or command.startswith("use "):
+        handle_use(stripped.removeprefix("use").strip(), state)
+        return False
+
+    if command == "edit" or command.startswith("edit "):
+        handle_edit(stripped.removeprefix("edit").strip(), state)
+        return False
+
+    if command == "run" or command.startswith("run "):
+        handle_run(stripped.removeprefix("run").strip(), state)
+        return False
+
     if is_recon_command(stripped):
         if _recon_requires_elevation(stripped):
             if not ensure_elevated_session(state):
@@ -202,6 +223,11 @@ def unwind_current_context(state: ShellState, *, use_color: bool | None = None) 
     if close_elevated_session(state, use_color=use_color):
         return False
     if handle_leave_job(state, use_color=use_color):
+        return False
+    if state.active_template:
+        template = state.active_template
+        state.active_template = ""
+        info(f"left template {template}", use_color=use_color)
         return False
     write_segments([("[shutdown]", "muted"), (" session terminated", "white")], use_color=use_color)
     return True
