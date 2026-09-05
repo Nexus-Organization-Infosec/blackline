@@ -1,0 +1,45 @@
+# CLT v0 language showcase: valid syntax only.
+target = 127.0.0.1
+name = "Internal Lab Review"
+timeout = 30
+fast_profile = fast
+balanced_profile = balanced
+deep_profile = deep
+
+# An operation uses positional inputs and named options inside square brackets.
+recon[target, strategy=deep, timeout=30]
+    -> analyze
+    -> scan target
+
+    # Equivalent port-condition word order is normalized deterministically.
+    if open port 22
+        -> inspect ssh
+        -> collect evidence
+    else
+        -> report
+
+    if port open 443
+        -> inspect tls
+        -> inspect web
+
+    if service http found
+        -> inspect web
+
+    if service https missing
+        -> report
+
+    # Generic entity/value/state conditions retain a compact factual style.
+    if target 127.0.0.1 true
+        -> save result
+
+    if host localhost false
+        -> load result
+
+    if protocol ssh found
+        -> inspect ssh
+
+    if version 10 missing
+        -> collect finding
+
+    if finding credential found
+        -> report

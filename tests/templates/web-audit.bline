@@ -1,0 +1,12 @@
+# Representative operational template. It is valid CLT source.
+target = example.com
+
+recon[target, strategy=balanced]
+    -> analyze
+
+    if service https found
+        -> inspect tls
+        -> inspect web
+
+    if service http found
+        -> inspect web

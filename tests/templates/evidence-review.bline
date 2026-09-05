@@ -1,0 +1,4 @@
+# Runs entirely through the current non-operational CLT capability runtime.
+analyze
+    -> collect evidence
+    -> report

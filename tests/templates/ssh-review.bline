@@ -1,0 +1,6 @@
+# A service-first workflow: SSH need not live on port 22.
+target = 127.0.0.1
+
+recon[target, strategy=deep]
+    if service ssh found
+        -> inspect ssh
