@@ -75,9 +75,15 @@ class CLTRuntime:
     def __init__(self, registry: CapabilityRegistry) -> None:
         self.registry = registry
 
-    def run(self, workflow: WorkflowIR, *, facts: Mapping[object, object] | None = None) -> RuntimeResult:
+    def run(
+        self,
+        workflow: WorkflowIR,
+        *,
+        facts: Mapping[object, object] | None = None,
+        variables: Mapping[str, str] | None = None,
+    ) -> RuntimeResult:
         """Run a compiled workflow against supplied facts and registered handlers."""
-        state = _RuntimeState(facts=dict(facts or {}))
+        state = _RuntimeState(facts=dict(facts or {}), variables=dict(variables or {}))
         self._run_block(workflow.statements, state)
         return RuntimeResult(dict(state.variables), tuple(state.events))
 
