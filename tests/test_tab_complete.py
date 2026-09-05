@@ -24,6 +24,15 @@ class TabCompleteTests(unittest.TestCase):
         self.assertIn("network ", complete_text("net"))
         self.assertIn("help ", complete_text("he"))
 
+    def test_top_level_completion_uses_semantic_kinds(self):
+        items = completion_items("")
+
+        self.assertIn(("clear", "command"), items)
+        self.assertIn(("help", "command"), items)
+        self.assertIn(("network", "tool"), items)
+        self.assertIn(("recon", "tool"), items)
+        self.assertIn(("exploit", "tool"), items)
+
     def test_help_completion_loads_topics_from_config(self):
         suggestions = complete_text("help rec")
 
@@ -132,18 +141,18 @@ class TabCompleteTests(unittest.TestCase):
     def test_recon_key_completion_inside_brackets(self):
         items = completion_items("recon[pro")
 
-        self.assertIn(("probe=", "how deep to fingerprint services"), items)
+        self.assertIn(("probe=", "option"), items)
 
     def test_recon_value_completion_inside_brackets(self):
         items = completion_items("recon[strategy=qu")
 
-        self.assertIn(("quiet, ", "recon profile or scan strategy"), items)
-        self.assertIn(("surface, ", "recon profile or scan strategy"), completion_items("recon[strategy=su"))
+        self.assertIn(("quiet, ", "value"), items)
+        self.assertIn(("surface, ", "value"), completion_items("recon[strategy=su"))
 
     def test_recon_probe_value_completion_inside_brackets(self):
         items = completion_items("recon[probe=fi")
 
-        self.assertIn(("fingerprint, ", "how deep to fingerprint services"), items)
+        self.assertIn(("fingerprint, ", "value"), items)
 
     def test_recon_value_completion_length_inside_brackets(self):
         self.assertEqual(current_completion_length("recon[strategy=qu", "strategy=qu"), 2)
