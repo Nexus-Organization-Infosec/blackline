@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from contextlib import redirect_stdout
+import os
 from pathlib import Path
 import io
 
@@ -156,6 +157,43 @@ class TabCompleteTests(unittest.TestCase):
 
     def test_recon_value_completion_length_inside_brackets(self):
         self.assertEqual(current_completion_length("recon[strategy=qu", "strategy=qu"), 2)
+
+    def test_template_lifecycle_completion_uses_registered_templates(self):
+        original_registry = tab_complete.TemplateRegistry
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "web-audit.bline"
+            source.write_text("analyze\n", encoding="utf-8")
+            from blackline.templates import TemplateRegistry, TemplateStorage
+
+            registry = TemplateRegistry(storage=TemplateStorage(root / "registry.json"))
+            registry.register(source)
+            tab_complete.TemplateRegistry = lambda: registry
+            try:
+                self.assertEqual(completion_items("use we"), [("web-audit", "template")])
+                self.assertEqual(completion_items("edit "), [("web-audit", "template")])
+                self.assertEqual(completion_items("run "), [("web-audit", "template")])
+                self.assertEqual(completion_items("list tem"), [("templates", "value")])
+            finally:
+                tab_complete.TemplateRegistry = original_registry
+
+    def test_load_completion_lists_bline_paths_and_directories(self):
+        original_directory = Path.cwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "workflows").mkdir()
+            (root / "web-audit.bline").write_text("analyze\n", encoding="utf-8")
+            (root / "notes.txt").write_text("not a template", encoding="utf-8")
+            os.chdir(root)
+            try:
+                self.assertEqual(
+                    completion_items("load "),
+                    [("workflows/", "path"), ("web-audit.bline", "path")],
+                )
+                self.assertEqual(completion_items("load web"), [("web-audit.bline", "path")])
+                self.assertEqual(complete_text("load workflows"), ["workflows/"])
+            finally:
+                os.chdir(original_directory)
 
     def test_command_completion_degrades_when_help_config_loader_fails(self):
         original_load_help_groups = tab_complete.load_help_groups
