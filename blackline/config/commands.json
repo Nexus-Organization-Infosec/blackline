@@ -6,6 +6,7 @@
       "items": [
         {
           "name": "new",
+          "kind": "command",
           "description": "create and enter a tracked job context",
           "usage": "new [module[key=value,...]]",
           "long_description": "create a manual tracked job context and enter it without running anything yet",
@@ -21,6 +22,7 @@
         },
         {
           "name": "run",
+          "kind": "command",
           "description": "execute current module or command",
           "usage": "run <command>",
           "arguments": [],
@@ -28,6 +30,7 @@
         },
         {
           "name": "use",
+          "kind": "command",
           "description": "load module(s) temporarily",
           "usage": "use <module>",
           "arguments": [["module", "module name or path"]],
@@ -35,6 +38,7 @@
         },
         {
           "name": "load",
+          "kind": "command",
           "description": "persist module into session",
           "usage": "load <module>",
           "arguments": [["module", "module name or path"]],
@@ -42,6 +46,7 @@
         },
         {
           "name": "list",
+          "kind": "command",
           "description": "list items in current context",
           "usage": "list [context]",
           "arguments": [["context", "optional context to inspect"]],
@@ -49,6 +54,7 @@
         },
         {
           "name": "edit",
+          "kind": "command",
           "description": "open module in editor",
           "usage": "edit <module>",
           "arguments": [["module", "module name or path"]],
@@ -56,6 +62,7 @@
         },
         {
           "name": "delete",
+          "kind": "command",
           "description": "remove job or resource",
           "usage": "delete #ID[, #ID] | delete *",
           "arguments": [["id", "job identifier"]],
@@ -63,6 +70,7 @@
         },
         {
           "name": "reset",
+          "kind": "command",
           "description": "reset environment",
           "usage": "reset [scope]",
           "arguments": [["scope", "optional scope to reset"]],
@@ -70,6 +78,7 @@
         },
         {
           "name": "clear",
+          "kind": "command",
           "description": "clear terminal",
           "usage": "clear",
           "arguments": [],
@@ -77,6 +86,7 @@
         },
         {
           "name": "update",
+          "kind": "command",
           "description": "update components",
           "usage": "update [component]",
           "arguments": [["component", "optional component name"]],
@@ -84,6 +94,7 @@
         },
         {
           "name": "history",
+          "kind": "command",
           "description": "view execution history",
           "usage": "history [all|clear]",
           "arguments": [
@@ -94,6 +105,7 @@
         },
         {
           "name": "show",
+          "kind": "command",
           "description": "inspect a job summary, formatted report, section, sources, or raw evidence",
           "usage": "show [#ID] [formatted|sources|raw|section]",
           "arguments": [["id", "optional job identifier"]],
@@ -101,6 +113,7 @@
         },
         {
           "name": "jobs",
+          "kind": "command",
           "description": "list all jobs",
           "usage": "jobs",
           "arguments": [],
@@ -108,6 +121,7 @@
         },
         {
           "name": "enter",
+          "kind": "command",
           "description": "switch into a job context",
           "usage": "enter #ID",
           "arguments": [["id", "job identifier"]],
@@ -115,6 +129,7 @@
         },
         {
           "name": "network",
+          "kind": "tool",
           "description": "show local and external network identity",
           "usage": "network",
           "arguments": [],
@@ -122,6 +137,7 @@
         },
         {
           "name": "version",
+          "kind": "command",
           "description": "show version info",
           "usage": "version",
           "arguments": [],
@@ -129,6 +145,7 @@
         },
         {
           "name": "help",
+          "kind": "command",
           "description": "show help",
           "usage": "help [command|category]",
           "arguments": [["command", "optional command or category name"]],
@@ -136,6 +153,7 @@
         },
         {
           "name": "exit",
+          "kind": "command",
           "description": "leave job or exit shell",
           "usage": "exit",
           "arguments": [],
@@ -149,6 +167,7 @@
       "items": [
         {
           "name": "recon",
+          "kind": "tool",
           "description": "target discovery (ip, url, email, etc.)",
           "usage": "recon[target=<ip>,strategy=<mode>,probe=<depth>]",
           "long_description": "perform reconnaissance on a target",
@@ -165,6 +184,7 @@
         },
         {
           "name": "find_exploit",
+          "kind": "tool",
           "description": "search exploit database",
           "usage": "find_exploit[target=<service>]",
           "arguments": [["target", "service, product, or CVE to search"]],
@@ -172,6 +192,7 @@
         },
         {
           "name": "exploit",
+          "kind": "tool",
           "description": "execute exploit",
           "usage": "exploit[id=<id>,target=<host>]",
           "arguments": [
@@ -182,6 +203,7 @@
         },
         {
           "name": "clean_up",
+          "kind": "tool",
           "description": "remove artifacts",
           "usage": "clean_up [scope]",
           "arguments": [["scope", "optional cleanup scope"]],
