@@ -14,7 +14,8 @@ from blackline.config.tool_loader import get_tool_config
 from blackline.cli.commands.system.help_cmd import load_help_groups, load_operators
 from blackline.cli.commands.system.jobs_cmd import list_jobs
 
-STATIC_COMMANDS = ("quit",)
+STATIC_COMMANDS = (("quit", "command"),)
+COMPLETION_KINDS = frozenset({"command", "tool", "operator", "workflow", "plugin", "option", "value"})
 SHOW_VIEWS = (
     ("formatted", "saved final recon report"),
     ("sources", "job provenance"),
@@ -40,15 +41,20 @@ def known_command_names() -> set[str]:
 
 def command_names() -> tuple[str, ...]:
     """Return command names loaded from JSON configuration."""
-    names = set(STATIC_COMMANDS)
+    return tuple(name for name, _ in command_items())
+
+
+def command_items() -> tuple[tuple[str, str], ...]:
+    """Return shell entry points and their semantic completion kinds."""
+    entries = dict(STATIC_COMMANDS)
     for group in _safe_help_groups():
         for item in group.items:
-            names.add(item.name)
-    return tuple(sorted(names))
+            entries[item.name] = _completion_kind(item.kind)
+    return tuple(sorted(entries.items()))
 
 
 def help_topics() -> tuple[str, ...]:
-    """Return help topics loaded from JSON configuration."""
+    """Return configured command-help topics."""
     topics = {"operators"}
     for group in _safe_help_groups():
         topics.add(group.id)
@@ -77,17 +83,17 @@ def completion_items(text: str) -> list[tuple[str, str]]:
     """Return context-aware completion replacements and display metadata."""
     leading = text.lstrip()
     if not leading:
-        return [(name, "command") for name in command_names()]
+        return list(command_items())
 
     if is_bracket_command(leading):
         return bracket_command_items(leading)
 
     if " " not in leading:
-        return [(name, "command") for name in command_names() if name.startswith(leading.lower())]
+        return [(name, kind) for name, kind in command_items() if name.startswith(leading.lower())]
 
     if expects_command(leading):
         token = "" if leading.endswith((" ", "\t")) else leading.rsplit(maxsplit=1)[-1]
-        return [(name, "command") for name in command_names() if name.startswith(token.lower())]
+        return [(name, kind) for name, kind in command_items() if name.startswith(token.lower())]
 
     if leading.startswith("delete "):
         return delete_target_items(leading)
@@ -100,7 +106,7 @@ def completion_items(text: str) -> list[tuple[str, str]]:
 
     if leading.startswith("help "):
         topic_prefix = leading.removeprefix("help ").strip().lower()
-        return [(topic, "help") for topic in help_topics() if topic.startswith(topic_prefix)]
+        return [(topic, "value") for topic in help_topics() if topic.startswith(topic_prefix)]
 
     token = leading.rsplit(maxsplit=1)[-1]
     return [(symbol, "operator") for symbol in operator_symbols() if symbol.startswith(token)]
@@ -277,7 +283,7 @@ def bracket_command_items(text: str) -> list[tuple[str, str]]:
         key, value_prefix = token.split("=", 1)
         choices = argument_choices(arguments, key.strip())
         return [
-            (choice + bracket_suffix(inner), argument_description(arguments, key.strip()))
+            (choice + bracket_suffix(inner), "value")
             for choice in choices
             if choice.lower().startswith(value_prefix.lower())
         ]
@@ -288,7 +294,7 @@ def bracket_command_items(text: str) -> list[tuple[str, str]]:
         if key in used_keys:
             continue
         if key.startswith(key_prefix):
-            items.append((f"{key}=", str(details.get("description", ""))))
+            items.append((f"{key}=", "option"))
     return items
 
 
@@ -360,7 +366,13 @@ def _safe_operators():
         return load_operators()
     except Exception as exc:
         _report_ui_error(f"operator config unavailable: {exc}")
-        return ()
+    return ()
+
+
+def _completion_kind(kind: str) -> str:
+    """Return an allowed compact completion label for a configured entry."""
+    normalized = kind.strip().lower()
+    return normalized if normalized in COMPLETION_KINDS else "command"
 
 
 def _report_ui_error(message: str) -> None:
