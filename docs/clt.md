@@ -2,6 +2,8 @@
 
 CLT is Blackline's small, deterministic workflow and capability language. It describes intent and control flow; it is not a general-purpose programming language and it never evaluates Python or shell syntax.
 
+CLT is an internal system, not a Blackline shell command. It has no `clt[...]` command to run.
+
 ```text
 target = 127.0.0.1
 
