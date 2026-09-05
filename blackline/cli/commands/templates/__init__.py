@@ -1,0 +1,1 @@
+"""Template lifecycle command adapters."""
