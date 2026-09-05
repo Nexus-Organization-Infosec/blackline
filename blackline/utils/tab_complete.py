@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import sys
+from pathlib import Path
 
 try:
     import readline
@@ -13,9 +14,10 @@ except ImportError:  # pragma: no cover - readline is Unix-only.
 from blackline.config.tool_loader import get_tool_config
 from blackline.cli.commands.system.help_cmd import load_help_groups, load_operators
 from blackline.cli.commands.system.jobs_cmd import list_jobs
+from blackline.templates import TemplateRegistry
 
 STATIC_COMMANDS = (("quit", "command"),)
-COMPLETION_KINDS = frozenset({"command", "tool", "operator", "workflow", "plugin", "option", "value"})
+COMPLETION_KINDS = frozenset({"command", "tool", "operator", "workflow", "plugin", "template", "option", "value"})
 SHOW_VIEWS = (
     ("formatted", "saved final recon report"),
     ("sources", "job provenance"),
@@ -71,7 +73,10 @@ def operator_symbols() -> tuple[str, ...]:
 
 def complete_text(text: str) -> list[str]:
     """Return completions for the current shell input."""
-    return [f"{completion} " for completion in completion_replacements(text)]
+    return [
+        completion if metadata == "path" and completion.endswith("/") else f"{completion} "
+        for completion, metadata in completion_items(text)
+    ]
 
 
 def completion_replacements(text: str) -> list[str]:
@@ -103,6 +108,20 @@ def completion_items(text: str) -> list[tuple[str, str]]:
 
     if leading.startswith("show "):
         return show_target_items(leading)
+
+    if leading.startswith("load "):
+        return template_path_items(leading.removeprefix("load "))
+
+    if leading.startswith("list "):
+        prefix = leading.removeprefix("list ").strip().lower()
+        return [("templates", "value")] if "templates".startswith(prefix) else []
+
+    if leading.startswith(("use ", "edit ", "run ")):
+        command, _, remainder = leading.partition(" ")
+        # Template names are only the first lifecycle argument.  Once another
+        # token follows, normal command/operator completion takes over.
+        if not remainder.strip() or not any(character.isspace() for character in remainder.strip()):
+            return template_target_items(remainder, command=command)
 
     if leading.startswith("help "):
         topic_prefix = leading.removeprefix("help ").strip().lower()
@@ -168,6 +187,55 @@ def show_target_items(text: str) -> list[tuple[str, str]]:
     return [*view_items, *job_items]
 
 
+def template_target_items(text: str, *, command: str) -> list[tuple[str, str]]:
+    """Return registry-backed templates for lifecycle commands only."""
+    prefix = text.strip().split("[", 1)[0].lower()
+    if command == "run" and not prefix:
+        return [(name, "template") for name in template_names()]
+    return [(name, "template") for name in template_names() if name.startswith(prefix)]
+
+
+def template_path_items(text: str) -> list[tuple[str, str]]:
+    """Complete directories and `.bline` sources for the `load` path argument."""
+    raw = text.strip()
+    directory, display_prefix, name_prefix = _path_completion_context(raw)
+    try:
+        children = tuple(directory.iterdir())
+    except OSError:
+        return []
+    items: list[tuple[str, str]] = []
+    for child in sorted(children, key=lambda item: (not item.is_dir(), item.name.lower())):
+        if not child.name.lower().startswith(name_prefix.lower()):
+            continue
+        if child.is_dir():
+            items.append((f"{display_prefix}{child.name}/", "path"))
+        elif child.is_file() and child.suffix.lower() == ".bline":
+            items.append((f"{display_prefix}{child.name}", "path"))
+    return items
+
+
+def _path_completion_context(raw: str):
+    """Resolve a typed path while retaining a completion string the user recognizes."""
+    if not raw:
+        return Path("."), "", ""
+    if raw.endswith("/"):
+        return Path(raw).expanduser(), raw, ""
+    typed = Path(raw).expanduser()
+    name_prefix = typed.name
+    parent = typed.parent
+    display_prefix = raw[: len(raw) - len(name_prefix)]
+    return parent, display_prefix, name_prefix
+
+
+def template_names() -> tuple[str, ...]:
+    """Read persisted template names without compiling or running their source."""
+    try:
+        return tuple(template.name for template in TemplateRegistry().list(refresh=False))
+    except Exception as exc:
+        _report_ui_error(f"template registry unavailable: {exc}")
+        return ()
+
+
 def current_completion_length(text: str, word: str) -> int:
     """Return how many chars prompt-toolkit should replace for current context."""
     leading = text.lstrip()
@@ -183,6 +251,10 @@ def current_completion_length(text: str, word: str) -> int:
         return len(leading.removeprefix("enter ").lstrip())
     if leading.startswith("show "):
         return len(leading.removeprefix("show ").lstrip())
+    if leading.startswith("load "):
+        return len(leading.removeprefix("load ").lstrip())
+    if leading.startswith(("use ", "edit ", "run ")):
+        return len(leading.rsplit(maxsplit=1)[-1]) if not leading.endswith(" ") else 0
     return len(word)
 
 
