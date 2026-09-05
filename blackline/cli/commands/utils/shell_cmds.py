@@ -21,6 +21,8 @@ class ShellState:
     prompt_session: Any | None = None
     sudo_authenticated: bool = False
     sudo_expires_at: float = 0.0
+    active_template: str = ""
+    template_registry: Any | None = None
 
 
 def handle_clear() -> None:
@@ -50,6 +52,7 @@ def handle_reset(state: ShellState, *, use_color: bool | None = None) -> None:
     state.history.clear()
     state.sudo_authenticated = False
     state.sudo_expires_at = 0.0
+    state.active_template = ""
     result("session state reset", use_color=use_color)
 
 
