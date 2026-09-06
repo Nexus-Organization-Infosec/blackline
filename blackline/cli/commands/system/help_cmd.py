@@ -25,7 +25,7 @@ class HelpItem:
     kind: str = "command"
     usage: str = ""
     long_description: str = ""
-    arguments: tuple[tuple[str, str], ...] = ()
+    arguments: tuple[HelpArgument, ...] = ()
     examples: tuple[str, ...] = ()
 
 
@@ -36,6 +36,23 @@ class HelpGroup:
     id: str
     title: str
     items: tuple[HelpItem, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class HelpArgumentChoice:
+    """One nested documented value for a command argument."""
+
+    value: str
+    description: str
+
+
+@dataclass(frozen=True, slots=True)
+class HelpArgument:
+    """Reusable structured metadata for one command argument."""
+
+    name: str
+    description: str
+    choices: tuple[HelpArgumentChoice, ...] = ()
 
 
 def handle_help(topic: str = "", *, use_color: bool | None = None) -> bool:
@@ -134,9 +151,7 @@ def render_item_help(item: HelpItem, *, use_color: bool | None = None) -> None:
 
     if item.arguments:
         write_line()
-        _section_title("arguments", use_color=use_color)
-        _section_rule("arguments", use_color=use_color)
-        _command_rows(list(item.arguments), min_width=8, use_color=use_color)
+        render_argument_table(item.arguments, use_color=use_color)
 
     if item.examples:
         write_line()
@@ -171,6 +186,50 @@ def _command_rows(rows: list[tuple[str, str]], *, min_width: int = 9, use_color:
                 (name.ljust(width), "white"),
                 ("  ", "muted"),
                 (description, "muted"),
+            ],
+            use_color=use_color,
+        )
+
+
+def render_argument_table(arguments: tuple[HelpArgument, ...], *, use_color: bool | None = None) -> None:
+    """Render reusable arguments with optional nested value descriptions."""
+    _section_title("arguments", use_color=use_color)
+    _section_rule("arguments", use_color=use_color)
+    if not arguments:
+        return
+    name_width = max(8, *(len(argument.name) for argument in arguments))
+    for index, argument in enumerate(arguments):
+        write_segments(
+            [
+                (argument.name.ljust(name_width), "white"),
+                ("  ", "muted"),
+                (argument.description, "muted"),
+            ],
+            use_color=use_color,
+        )
+        if argument.choices:
+            _argument_choice_rows(argument.choices, name_width=name_width, use_color=use_color)
+        if index != len(arguments) - 1 and argument.choices:
+            write_line(use_color=use_color)
+
+
+def _argument_choice_rows(
+    choices: tuple[HelpArgumentChoice, ...],
+    *,
+    name_width: int,
+    use_color: bool | None,
+) -> None:
+    choice_width = max(len(choice.value) for choice in choices)
+    indent = " " * (name_width + 2)
+    for index, choice in enumerate(choices):
+        branch = "└─" if index == len(choices) - 1 else "├─"
+        write_segments(
+            [
+                (indent, "muted"),
+                (branch + " ", "muted"),
+                (choice.value.ljust(choice_width), "white"),
+                ("  ", "muted"),
+                (choice.description, "muted"),
             ],
             use_color=use_color,
         )
@@ -234,9 +293,31 @@ def _item_from_dict(raw: dict[str, Any]) -> HelpItem:
         kind=str(raw.get("kind", "command")).strip().lower() or "command",
         usage=str(raw.get("usage", "")),
         long_description=str(raw.get("long_description", "")),
-        arguments=tuple((str(key), str(value)) for key, value in raw.get("arguments", [])),
+        arguments=tuple(_argument_from_raw(argument) for argument in raw.get("arguments", [])),
         examples=tuple(str(example) for example in raw.get("examples", [])),
     )
+
+
+def _argument_from_raw(raw: object) -> HelpArgument:
+    """Support compact legacy pairs and richer reusable argument metadata."""
+    if isinstance(raw, dict):
+        choices = raw.get("choices", [])
+        return HelpArgument(
+            name=str(raw.get("name", "")),
+            description=str(raw.get("description", "")),
+            choices=tuple(_argument_choice_from_raw(choice) for choice in choices if isinstance(choice, (dict, list, tuple))),
+        )
+    if isinstance(raw, (list, tuple)) and len(raw) >= 2:
+        return HelpArgument(str(raw[0]), str(raw[1]))
+    return HelpArgument(str(raw), "")
+
+
+def _argument_choice_from_raw(raw: object) -> HelpArgumentChoice:
+    if isinstance(raw, dict):
+        return HelpArgumentChoice(str(raw.get("value", "")), str(raw.get("description", "")))
+    if isinstance(raw, (list, tuple)) and len(raw) >= 2:
+        return HelpArgumentChoice(str(raw[0]), str(raw[1]))
+    return HelpArgumentChoice(str(raw), "")
 
 
 def _load_json(path: Path) -> dict[str, Any]:
