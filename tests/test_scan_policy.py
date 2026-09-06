@@ -19,6 +19,7 @@ class NmapScanPolicyTests(unittest.TestCase):
             "quiet": ("nmap", "-Pn", "-T2", "--top-ports", "1000", "-sV", "10.0.0.1"),
             "deep": ("nmap", "-Pn", "-T4", "-p-", "-sV", "-O", "10.0.0.1"),
             "udp": ("nmap", "-Pn", "-sU", "--top-ports", "100", "10.0.0.1"),
+            "auto": ("nmap", "-Pn", "-T3", "--top-ports", "5000", "-sV", "10.0.0.1"),
         }
         for strategy, command in expected.items():
             with self.subTest(strategy=strategy):
