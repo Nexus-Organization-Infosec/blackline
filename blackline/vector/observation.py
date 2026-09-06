@@ -16,6 +16,8 @@ class Observation:
     source: str
     confidence: float = 1.0
     identifier: str = ""
+    origin: str = "observed"
+    source_evidence: tuple[str, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         kind = self.kind.strip().lower()
@@ -26,12 +28,17 @@ class Observation:
             raise ValueError("a Vector observation requires a source")
         if not 0.0 <= self.confidence <= 1.0:
             raise ValueError("observation confidence must be between 0 and 1")
+        origin = self.origin.strip().lower()
+        if origin not in {"observed", "derived"}:
+            raise ValueError("observation origin must be observed or derived")
         normalized_data = {str(key).strip().lower(): value for key, value in self.data.items()}
         if not normalized_data:
             raise ValueError("a Vector observation requires structured data")
         object.__setattr__(self, "kind", kind)
         object.__setattr__(self, "source", source)
         object.__setattr__(self, "data", normalized_data)
+        object.__setattr__(self, "origin", origin)
+        object.__setattr__(self, "source_evidence", tuple(sorted(set(self.source_evidence))))
         if not self.identifier:
             digest_input = f"{kind}|{source}|{sorted((key, str(value)) for key, value in normalized_data.items())}"
             object.__setattr__(self, "identifier", sha256(digest_input.encode()).hexdigest()[:16])
