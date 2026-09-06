@@ -24,6 +24,7 @@ class NmapRequest:
     service_detection: bool = False
     scripts: bool = False
     os_detection: bool = False
+    use_default_timing: bool = True
     extra_flags: tuple[str, ...] = ()
 
 
@@ -55,7 +56,7 @@ def build_nmap_command(request: NmapRequest, *, config: dict | None = None) -> t
     timing = request.timing
     if timing:
         _replace_or_append_flag(command, "-T", f"-{timing}")
-    elif not any(item.startswith("-T") for item in command):
+    elif request.use_default_timing and not any(item.startswith("-T") for item in command):
         default_timing = str(defaults.get("timing") or "")
         if default_timing:
             command.append(f"-{default_timing}")
@@ -63,6 +64,8 @@ def build_nmap_command(request: NmapRequest, *, config: dict | None = None) -> t
     ports = request.ports or str(defaults.get("ports") or "")
     if request.top_ports:
         command.extend(["--top-ports", request.top_ports])
+    elif ports == "all":
+        command.append("-p-")
     elif ports:
         command.extend(["-p", ports])
 
