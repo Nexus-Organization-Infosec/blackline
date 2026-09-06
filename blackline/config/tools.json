@@ -27,7 +27,7 @@
         },
         "strategy": {
           "description": "recon profile or scan strategy",
-          "choices": ["surface", "balanced", "quiet", "fast", "deep", "udp"]
+          "choices": ["surface", "balanced", "quiet", "fast", "deep", "udp", "auto"]
         },
         "speed": {
           "description": "execution speed",
