@@ -141,7 +141,9 @@ class EngineRunnerTests(unittest.TestCase):
         self.assertEqual(plan.steps[3].params["port"], "443")
         self.assertEqual(plan.steps[4].action, "rdap")
         self.assertEqual(plan.steps[5].params["target"], "192.168.1.1")
-        self.assertEqual(plan.steps[5].params["ports"], "1-1024")
+        self.assertEqual(plan.steps[5].params["ports"], "")
+        self.assertEqual(plan.steps[5].params["top_ports"], "5000")
+        self.assertEqual(plan.steps[5].params["profile"], "balanced")
         self.assertEqual([step.execution_group for step in plan.steps], [0, 0, 1, 0, 2, 1])
 
     def test_build_plan_uses_normalized_url_host_for_recon(self):
@@ -218,7 +220,7 @@ class EngineRunnerTests(unittest.TestCase):
         )
 
         self.assertEqual([step.tool for step in plan.steps], ["ipintel", "http", "fingerprint", "tls", "rdap", "nmap"])
-        self.assertEqual(plan.steps[5].params["profile"], "stealth")
+        self.assertEqual(plan.steps[5].params["profile"], "quiet")
         self.assertIsNotNone(plan.pipeline)
         self.assertEqual(
             [step.name for step in plan.pipeline.steps],
