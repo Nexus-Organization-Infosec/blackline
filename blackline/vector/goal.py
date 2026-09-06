@@ -22,8 +22,8 @@ class Goal:
             raise ValueError("a Vector goal requires an action")
         if not target:
             raise ValueError("a Vector goal requires a target")
-        if strategy not in {"fast", "balanced", "deep"}:
-            raise ValueError("Vector strategy must be fast, balanced, or deep")
+        if not strategy:
+            raise ValueError("a Vector goal requires a strategy")
         object.__setattr__(self, "action", action)
         object.__setattr__(self, "target", target)
         object.__setattr__(self, "strategy", strategy)
