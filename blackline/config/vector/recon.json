@@ -1,0 +1,67 @@
+{
+  "capabilities": [
+    {
+      "verb": "probe",
+      "subject": "http",
+      "requires": [{"entity": "service", "value": "http", "state": "open"}],
+      "priority": 4,
+      "cost": 1
+    },
+    {
+      "verb": "probe",
+      "subject": "https",
+      "requires": [{"entity": "service", "value": "https", "state": "open"}],
+      "priority": 4,
+      "cost": 1
+    },
+    {
+      "verb": "fingerprint",
+      "subject": "http",
+      "requires": [{"entity": "service", "value": "http", "state": "open"}],
+      "priority": 3,
+      "cost": 2
+    },
+    {
+      "verb": "fingerprint",
+      "subject": "https",
+      "requires": [{"entity": "service", "value": "https", "state": "open"}],
+      "priority": 3,
+      "cost": 2
+    },
+    {
+      "verb": "inspect",
+      "subject": "tls",
+      "requires": [{"entity": "service", "value": "https", "state": "open"}],
+      "priority": 3,
+      "cost": 2
+    },
+    {
+      "verb": "collect",
+      "subject": "network_intelligence_after_failure",
+      "requires": [{"entity": "discovery", "value": "nmap", "state": "failed"}],
+      "priority": 5,
+      "cost": 1
+    },
+    {
+      "verb": "collect",
+      "subject": "network_intelligence_after_empty_scan",
+      "requires": [{"entity": "discovery", "value": "nmap", "state": "no_services"}],
+      "priority": 4,
+      "cost": 1
+    }
+  ],
+  "strategies": {
+    "auto": {"max_actions_per_round": 3, "max_decision_rounds": 3, "cost_weight": 1},
+    "surface": {"max_actions_per_round": 1, "max_decision_rounds": 2, "cost_weight": 3, "allowed_actions": ["probe:http", "probe:https", "collect:network_intelligence_after_failure", "collect:network_intelligence_after_empty_scan"]},
+    "fast": {"max_actions_per_round": 1, "max_decision_rounds": 2, "cost_weight": 2, "allowed_actions": ["probe:http", "probe:https", "collect:network_intelligence_after_failure", "collect:network_intelligence_after_empty_scan"]},
+    "balanced": {"max_actions_per_round": 3, "max_decision_rounds": 3, "cost_weight": 1},
+    "quiet": {"max_actions_per_round": 1, "max_decision_rounds": 2, "cost_weight": 4, "allowed_actions": ["probe:http", "probe:https", "collect:network_intelligence_after_failure", "collect:network_intelligence_after_empty_scan"]},
+    "deep": {"max_actions_per_round": 5, "max_decision_rounds": 5, "cost_weight": 0},
+    "udp": {"max_actions_per_round": 1, "max_decision_rounds": 2, "cost_weight": 2, "allowed_actions": ["collect:network_intelligence_after_failure", "collect:network_intelligence_after_empty_scan"]}
+  },
+  "overrides": {"transport": {"udp": {}}},
+  "service_normalization": {
+    "https_services": ["https", "ssl/http", "ssl|http"],
+    "web_default_ports": [80, 3000, 8000, 8080, 8443]
+  }
+}
