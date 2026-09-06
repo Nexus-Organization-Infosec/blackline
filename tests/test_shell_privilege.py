@@ -3,7 +3,7 @@ import unittest
 from contextlib import redirect_stdout
 from unittest.mock import patch
 
-from blackline.cli import auth, core_shell
+from blackline.cli import auth, core_shell, dispatcher
 from blackline.cli.commands.utils.shell_cmds import ShellState
 from blackline.utils.exec import CommandResult
 
@@ -79,8 +79,8 @@ class ShellPrivilegeTests(unittest.TestCase):
         output = io.StringIO()
         created = {"count": 0}
         called = {"count": 0}
-        original_handle_new = core_shell.dispatch_line.__globals__["handle_new"]
-        original_handle_recon = core_shell.dispatch_line.__globals__["handle_recon"]
+        original_handle_new = dispatcher.handle_new
+        original_handle_recon = dispatcher.handle_recon
 
         def fake_handle_new(*args, **kwargs):
             created["count"] += 1
@@ -90,16 +90,16 @@ class ShellPrivilegeTests(unittest.TestCase):
             called["count"] += 1
             return True
 
-        core_shell.dispatch_line.__globals__["handle_new"] = fake_handle_new
-        core_shell.dispatch_line.__globals__["handle_recon"] = fake_handle_recon
+        dispatcher.handle_new = fake_handle_new
+        dispatcher.handle_recon = fake_handle_recon
         try:
-            with patch.object(core_shell, "_recon_requires_elevation", return_value=True):
-                with patch.object(core_shell, "ensure_elevated_session", return_value=False):
+            with patch.object(dispatcher, "requires_elevation", return_value=True):
+                with patch.object(dispatcher, "ensure_elevated_session", return_value=False):
                     with redirect_stdout(output):
                         should_exit = core_shell.dispatch_line("recon[target=10.0.0.1,strategy=quiet]", ShellState())
         finally:
-            core_shell.dispatch_line.__globals__["handle_new"] = original_handle_new
-            core_shell.dispatch_line.__globals__["handle_recon"] = original_handle_recon
+            dispatcher.handle_new = original_handle_new
+            dispatcher.handle_recon = original_handle_recon
 
         self.assertFalse(should_exit)
         self.assertEqual(created["count"], 0)
@@ -110,8 +110,8 @@ class ShellPrivilegeTests(unittest.TestCase):
         output = io.StringIO()
         created = {"count": 0}
         called = {"active_job": ""}
-        original_handle_new = core_shell.dispatch_line.__globals__["handle_new"]
-        original_handle_recon = core_shell.dispatch_line.__globals__["handle_recon"]
+        original_handle_new = dispatcher.handle_new
+        original_handle_recon = dispatcher.handle_recon
 
         def fake_handle_new(expression, state, **kwargs):
             created["count"] += 1
@@ -123,16 +123,16 @@ class ShellPrivilegeTests(unittest.TestCase):
             print("[result] fake recon")
             return True
 
-        core_shell.dispatch_line.__globals__["handle_new"] = fake_handle_new
-        core_shell.dispatch_line.__globals__["handle_recon"] = fake_handle_recon
+        dispatcher.handle_new = fake_handle_new
+        dispatcher.handle_recon = fake_handle_recon
         try:
-            with patch.object(core_shell, "_recon_requires_elevation", return_value=True):
-                with patch.object(core_shell, "ensure_elevated_session", return_value=True):
+            with patch.object(dispatcher, "requires_elevation", return_value=True):
+                with patch.object(dispatcher, "ensure_elevated_session", return_value=True):
                     with redirect_stdout(output):
                         should_exit = core_shell.dispatch_line("recon[target=10.0.0.1,strategy=quiet]", ShellState())
         finally:
-            core_shell.dispatch_line.__globals__["handle_new"] = original_handle_new
-            core_shell.dispatch_line.__globals__["handle_recon"] = original_handle_recon
+            dispatcher.handle_new = original_handle_new
+            dispatcher.handle_recon = original_handle_recon
 
         self.assertFalse(should_exit)
         self.assertEqual(created["count"], 1)
