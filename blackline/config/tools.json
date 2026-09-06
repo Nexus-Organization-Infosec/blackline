@@ -70,8 +70,23 @@
         "aggressive": {
           "flags": ["-Pn", "-T4", "-A"]
         },
+        "surface": {
+          "flags": ["-Pn"]
+        },
+        "fast": {
+          "flags": ["-Pn", "-T4"]
+        },
+        "balanced": {
+          "flags": ["-Pn", "-T3"]
+        },
+        "quiet": {
+          "flags": ["-Pn", "-T2"]
+        },
+        "deep": {
+          "flags": ["-Pn", "-T4"]
+        },
         "udp": {
-          "flags": ["-Pn", "-sU", "-T3"]
+          "flags": ["-Pn", "-sU"]
         }
       },
       "options": {
