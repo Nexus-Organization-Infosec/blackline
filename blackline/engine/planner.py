@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from blackline.core.recon import ReconPipeline, build_recon_pipeline
 from blackline.core.recon.models import ReconStep
+from blackline.core.recon.scan_policy import nmap_policy_params
 from blackline.engine.context import ExecutionContext
 
 
@@ -94,82 +95,23 @@ def _plan_step_from_recon_step(step: ReconStep, params: dict[str, str]) -> PlanS
             execution_group=_execution_group(step),
         )
 
+    scan_params = nmap_policy_params(params)
     return PlanStep(
         tool=step.tool,
         action=step.name,
         params={
             "target": str(step.inputs.get("target", "")),
-            "ports": str(step.inputs.get("ports", "1-1024")),
-            "top_ports": str(step.inputs.get("top_ports", "")),
-            "profile": _recon_profile(params),
-            "timing": _recon_timing(params),
-            "service_detection": _recon_service_detection(params),
-            "scripts": _recon_scripts(params),
-            "os_detection": _recon_os_detection(params),
+            "ports": str(step.inputs.get("ports", "")) or scan_params["ports"],
+            "top_ports": str(step.inputs.get("top_ports", "")) or scan_params["top_ports"],
+            "profile": scan_params["profile"],
+            "timing": scan_params["timing"],
+            "service_detection": scan_params["service_detection"],
+            "scripts": scan_params["scripts"],
+            "os_detection": scan_params["os_detection"],
+            "use_default_timing": scan_params["use_default_timing"],
         },
         execution_group=_execution_group(step),
     )
-
-
-def _recon_profile(params: dict[str, str]) -> str:
-    profile = params.get("profile", "")
-    if profile:
-        return profile
-
-    strategy = params.get("strategy", "").strip().lower()
-    transport = params.get("transport", "").strip().lower()
-    if strategy == "quiet":
-        return "stealth"
-    if strategy == "fast":
-        return "service"
-    if strategy == "deep":
-        return "aggressive"
-    if strategy == "udp" or transport == "udp":
-        return "udp"
-    return "default"
-
-
-def _recon_timing(params: dict[str, str]) -> str:
-    timing = params.get("timing", "")
-    if timing:
-        return timing
-
-    speed = params.get("speed", "").strip().lower()
-    mapping = {
-        "low": "T2",
-        "normal": "T3",
-        "high": "T4",
-        "aggressive": "T5",
-    }
-    return mapping.get(speed, "")
-
-
-def _recon_service_detection(params: dict[str, str]) -> str:
-    if "service" in params:
-        return params.get("service", "")
-    if "service_detection" in params:
-        return params.get("service_detection", "")
-
-    probe = params.get("probe", "").strip().lower()
-    return "true" if probe in {"service", "script", "fingerprint"} else ""
-
-
-def _recon_scripts(params: dict[str, str]) -> str:
-    if "scripts" in params:
-        return params.get("scripts", "")
-
-    probe = params.get("probe", "").strip().lower()
-    return "true" if probe in {"script", "fingerprint"} else ""
-
-
-def _recon_os_detection(params: dict[str, str]) -> str:
-    if "os" in params:
-        return params.get("os", "")
-    if "os_detection" in params:
-        return params.get("os_detection", "")
-
-    probe = params.get("probe", "").strip().lower()
-    return "true" if probe == "fingerprint" else ""
 
 
 def _execution_group(step: ReconStep) -> int:
