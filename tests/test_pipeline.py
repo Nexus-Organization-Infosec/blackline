@@ -73,12 +73,12 @@ class ReconPipelineTests(unittest.TestCase):
 
         self.assertNotIn("tls_inspection", [step.name for step in pipeline.steps])
 
-    def test_surface_profile_excludes_network_intel_and_active_port_scan(self):
+    def test_surface_profile_excludes_network_intel_but_keeps_bounded_port_scan(self):
         pipeline = build_recon_pipeline("example.com", params={"strategy": "surface"})
 
         self.assertEqual(
             [step.name for step in pipeline.steps],
-            ["dns", "http_probe", "web_fingerprint", "tls_inspection", "rdap"],
+            ["dns", "http_probe", "web_fingerprint", "tls_inspection", "rdap", "port_scan"],
         )
 
     def test_balanced_and_deep_keep_the_full_evidence_set(self):
@@ -88,10 +88,10 @@ class ReconPipelineTests(unittest.TestCase):
         self.assertEqual([step.tool for step in balanced.steps], [step.tool for step in deep.steps])
         self.assertIn("nmap", [step.tool for step in deep.steps])
 
-    def test_fast_is_a_compatibility_alias_for_surface(self):
+    def test_fast_is_a_distinct_bounded_profile(self):
         fast = build_recon_pipeline("example.com", params={"strategy": "fast"})
 
-        self.assertNotIn("nmap", [step.tool for step in fast.steps])
+        self.assertIn("nmap", [step.tool for step in fast.steps])
         self.assertNotIn("ipintel", [step.tool for step in fast.steps])
 
     def test_normalize_target_rejects_malformed_target(self):
