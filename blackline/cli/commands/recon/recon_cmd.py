@@ -40,6 +40,7 @@ def handle_recon(
         session=EngineSession(active_job=active_job),
         plan_callback=progress.show_plan,
         progress_callback=progress.update,
+        vector_callback=lambda investigation_round: render_vector_round(investigation_round, use_color=use_color),
     )
     progress.finish(cancelled=run.cancelled)
     if not run.plan.steps:
@@ -123,6 +124,50 @@ def handle_recon(
     return False
 
 
+def render_vector_round(investigation_round: object, *, use_color: bool | None = None) -> None:
+    """Render a concise, explainable Vector decision without private traces."""
+    decision = getattr(investigation_round, "decision", None)
+    if decision is None:
+        return
+    number = int(getattr(investigation_round, "number", 0))
+    discovered = len(getattr(getattr(decision, "delta", None), "services", ()))
+    selected = tuple(getattr(decision, "selected", ()))
+    write_segments(
+        [("[vector]", "cyan"), (f" round {number} evaluated", "white")],
+        use_color=use_color,
+    )
+    if discovered:
+        write_line(f"         {discovered} services discovered", use_color=use_color)
+    if not selected:
+        write_line("         no high-value follow-ups remain", use_color=use_color)
+        return
+    write_line("         follow-up plan", use_color=use_color)
+    for candidate in selected:
+        label = _vector_candidate_label(candidate)
+        target = str(getattr(candidate, "target", ""))
+        dots = "." * max(3, 36 - len(label))
+        write_segments(
+            [("         ", "white"), (label, "white"), (f" {dots} {target}", "muted")],
+            use_color=use_color,
+        )
+
+
+def _vector_candidate_label(candidate: object) -> str:
+    intent = getattr(candidate, "intent", None)
+    verb = str(getattr(intent, "verb", ""))
+    subject = str(getattr(intent, "subject", ""))
+    labels = {
+        ("probe", "http"): "HTTP probe",
+        ("probe", "https"): "HTTPS probe",
+        ("fingerprint", "http"): "web fingerprint",
+        ("fingerprint", "https"): "web fingerprint",
+        ("inspect", "tls"): "TLS certificate inspection",
+        ("collect", "network_intelligence_after_failure"): "network intelligence fallback",
+        ("collect", "network_intelligence_after_empty_scan"): "network intelligence fallback",
+    }
+    return labels.get((verb, subject), f"{verb} {subject}".strip() or "follow-up")
+
+
 class ReconProgressRenderer:
     """Render an in-place stateful preflight checklist in an interactive TTY."""
 
@@ -132,6 +177,7 @@ class ReconProgressRenderer:
         self.steps: list[PlanStep] = []
         self.states: list[str] = []
         self.rendered = False
+        self.rendered_lines = 0
 
     def show_plan(self, plan: ExecutionPlan) -> None:
         """Describe the planned checks before the first external tool runs."""
@@ -169,7 +215,7 @@ class ReconProgressRenderer:
 
     def _render(self, headline: str) -> None:
         if self.rendered:
-            sys.stdout.write(f"\033[{self.total + 1}A\r")
+            sys.stdout.write(f"\033[{self.rendered_lines}A\r")
 
         header = colorize("[plan]", "cyan", enabled=True) + colorize(f" {headline}", "white", enabled=True)
         sys.stdout.write(f"\033[2K{header}\n")
@@ -180,6 +226,7 @@ class ReconProgressRenderer:
             sys.stdout.write(f"\033[2K{prefix}{colorize(state, _progress_color(state), enabled=True)}\n")
         sys.stdout.flush()
         self.rendered = True
+        self.rendered_lines = self.total + 1
 
 
 def _progress_label(step: PlanStep) -> str:
