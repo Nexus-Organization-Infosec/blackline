@@ -323,6 +323,7 @@ def execute_step(
                 service_detection=_to_bool(step.params.get("service_detection", "")),
                 scripts=_to_bool(step.params.get("scripts", "")),
                 os_detection=_to_bool(step.params.get("os_detection", "")),
+                use_default_timing=_to_bool(step.params.get("use_default_timing", "true")),
             ),
             executor=command_executor,
             timeout_seconds=timeout_seconds,
