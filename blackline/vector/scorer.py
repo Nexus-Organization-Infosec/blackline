@@ -9,9 +9,8 @@ from blackline.vector.capability import Capability
 from blackline.vector.goal import Goal
 
 
-def score(candidate: Candidate, capability: Capability, goal: Goal) -> Candidate:
+def score(candidate: Candidate, capability: Capability, goal: Goal, *, cost_weight: int = 1) -> Candidate:
     """Score one candidate with transparent strategy-sensitive cost handling."""
-    cost_weight = {"fast": 2, "balanced": 1, "deep": 0}[goal.strategy]
     score_value = capability.priority - capability.risk - (capability.cost * cost_weight)
     return replace(candidate, score=score_value)
 
