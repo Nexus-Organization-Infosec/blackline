@@ -13,7 +13,7 @@ def port_scan_step(target: ReconTarget, params: dict[str, str]) -> ReconStep:
         inputs={
             "target": target.scan_target,
             "target_type": target.target_type,
-            "ports": params.get("ports", "1-1024"),
+            "ports": params.get("ports", ""),
             "top_ports": params.get("top_ports", ""),
             "strategy": params.get("strategy", ""),
             "speed": params.get("speed", ""),
