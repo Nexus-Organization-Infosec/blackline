@@ -23,6 +23,7 @@ PROFILE_TOOLS: dict[str, frozenset[str]] = {
     "deep": frozenset({"dns", "ipintel", "http", "fingerprint", "tls", "rdap", "nmap"}),
     "udp": frozenset({"dns", "ipintel", "http", "fingerprint", "tls", "rdap", "nmap"}),
 }
+PROFILE_TOOLS["auto"] = PROFILE_TOOLS["balanced"]
 
 
 @dataclass(frozen=True, slots=True)
