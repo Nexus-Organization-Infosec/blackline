@@ -6,6 +6,7 @@ from collections.abc import Iterable
 
 from blackline.clt.ir import IRRule
 from blackline.vector.capability import Capability
+from blackline.vector.candidate import Candidate
 from blackline.vector.decision import Decision, Rejection
 from blackline.vector.goal import Goal
 from blackline.vector.observation import Observation
@@ -61,7 +62,11 @@ class Vector:
             self.goal,
             self.state,
             self.resolver,
-            delta=delta if delta.changed else None,
+            # Decisions are made from the complete investigation state. The
+            # delta remains attached to the trace for explainability; it must
+            # not hide an earlier, still-unexplored branch after another tool
+            # adds unrelated evidence.
+            delta=None,
             completed=frozenset(self._completed),
         )
         candidates = []
@@ -74,9 +79,9 @@ class Vector:
             if not policy.allowed:
                 rejected.append(Rejection(candidate, policy.reason))
                 continue
-            candidates.append(score(candidate, capability, self.goal))
+            candidates.append(score(candidate, capability, self.goal, cost_weight=self.policy.cost_weight))
         ranked = rank(candidates)
-        selected = ranked[:1]
+        selected = ranked[: self.policy.max_actions_per_round]
         decision = Decision(self._cycle, delta, ranked, selected, tuple(rejected))
         self._decisions.append(decision)
         return decision
