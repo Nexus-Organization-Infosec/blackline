@@ -1083,3 +1083,19 @@ independent
 replaceable
 structured
 ```
+# Recon strategy and Nmap policy
+
+Recon strategy selects an explicit Nmap discovery policy. It does not ask Nmap to duplicate Blackline's HTTP, TLS, DNS, registration, or network-intelligence evidence layers.
+
+| Strategy | Nmap baseline |
+| --- | --- |
+| `surface` | `nmap -Pn --top-ports 100 <target>` |
+| `fast` | `nmap -Pn -T4 --top-ports 1000 <target>` |
+| `balanced` | `nmap -Pn -T3 -sV --top-ports 5000 <target>` |
+| `quiet` | `nmap -Pn -T2 -sV --top-ports 1000 <target>` |
+| `deep` | `nmap -Pn -T4 -p- -sV -O <target>` |
+| `udp` | `sudo nmap -Pn -sU --top-ports 100 <target>` |
+
+`balanced` is the default. `quiet` reduces rate and network load; it does not make a scan invisible. `deep` intentionally avoids `-A`: Nmap performs discovery, version detection, and OS detection while Blackline chooses protocol-specific enrichment afterward.
+
+Explicit `ports`, `top_ports`, `speed`, `probe`, and `transport` values override the relevant policy setting. `probe` controls Nmap enrichment flags only; it does not disable Blackline's separate evidence modules.
