@@ -182,6 +182,7 @@
                 ["balanced", "general-purpose service discovery (default)"],
                 ["quiet", "reduced-rate, lower-traffic discovery"],
                 ["deep", "full TCP port and system/service discovery"],
+                ["auto", "adaptive Vector-driven investigation"],
                 ["udp", "UDP-focused service discovery"]
               ]
             },
