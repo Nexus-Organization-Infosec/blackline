@@ -59,6 +59,7 @@ class StructureTests(unittest.TestCase):
             "config/tools.json",
             "config/defaults.json",
             "config/global.json",
+            "config/vector/recon.json",
             "storage/database",
             "storage/cache",
             "utils/exec.py",
