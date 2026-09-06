@@ -14,13 +14,14 @@ from blackline.core.recon.steps.tls import tls_inspection_step
 from blackline.core.recon.steps.web_fingerprint import web_fingerprint_step
 
 PROFILE_TOOLS: dict[str, frozenset[str]] = {
-    # Surface is limited to passive registration and ordinary web observations.
-    "surface": frozenset({"dns", "http", "fingerprint", "tls", "rdap"}),
-    # Balanced is the standard investigation profile.
+    # Surface and fast still take a deliberately bounded Nmap snapshot.
+    "surface": frozenset({"dns", "http", "fingerprint", "tls", "rdap", "nmap"}),
+    "fast": frozenset({"dns", "http", "fingerprint", "tls", "rdap", "nmap"}),
+    # These profiles keep Blackline's independent evidence layers available.
     "balanced": frozenset({"dns", "ipintel", "http", "fingerprint", "tls", "rdap", "nmap"}),
-    # Deep uses the same evidence layers, with deeper adapters (for example -A
-    # and deep network intelligence) selected by the planner and step inputs.
+    "quiet": frozenset({"dns", "ipintel", "http", "fingerprint", "tls", "rdap", "nmap"}),
     "deep": frozenset({"dns", "ipintel", "http", "fingerprint", "tls", "rdap", "nmap"}),
+    "udp": frozenset({"dns", "ipintel", "http", "fingerprint", "tls", "rdap", "nmap"}),
 }
 
 
@@ -80,10 +81,8 @@ def _steps_for_target(target: ReconTarget, params: dict[str, str]) -> tuple[Reco
 
 
 def recon_profile_name(params: dict[str, str]) -> str:
-    """Return the evidence-selection profile while retaining legacy scan modes."""
+    """Return the evidence-selection profile; Nmap details live in scan policy."""
     requested = params.get("strategy", "").strip().lower()
-    if requested == "fast":
-        return "surface"
     return requested if requested in PROFILE_TOOLS else "balanced"
 
 
