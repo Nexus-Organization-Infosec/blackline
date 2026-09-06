@@ -5,6 +5,7 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
+from blackline.cli import dispatcher
 from blackline.cli.commands.recon import recon_cmd
 from blackline.cli.commands.system.jobs_cmd import handle_new, load_job
 from blackline.cli.core_shell import dispatch_line, is_recon_command
@@ -968,8 +969,8 @@ class ReconCommandTests(unittest.TestCase):
     def test_dispatch_line_routes_recon_expression(self):
         output = io.StringIO()
         original_handle_recon = recon_cmd.handle_recon
-        original_core_handle_recon = dispatch_line.__globals__["handle_recon"]
-        original_handle_new = dispatch_line.__globals__["handle_new"]
+        original_dispatch_handle_recon = dispatcher.handle_recon
+        original_handle_new = dispatcher.handle_new
         called = {"expression": ""}
         created = {"expression": "", "render_summary": None}
 
@@ -996,15 +997,15 @@ class ReconCommandTests(unittest.TestCase):
             return True
 
         recon_cmd.handle_recon = fake_handle_recon
-        dispatch_line.__globals__["handle_recon"] = fake_handle_recon
-        dispatch_line.__globals__["handle_new"] = fake_handle_new
+        dispatcher.handle_recon = fake_handle_recon
+        dispatcher.handle_new = fake_handle_new
         try:
             with redirect_stdout(output):
                 should_exit = dispatch_line("recon[target=10.0.0.1]", ShellState())
         finally:
             recon_cmd.handle_recon = original_handle_recon
-            dispatch_line.__globals__["handle_recon"] = original_core_handle_recon
-            dispatch_line.__globals__["handle_new"] = original_handle_new
+            dispatcher.handle_recon = original_dispatch_handle_recon
+            dispatcher.handle_new = original_handle_new
 
         self.assertFalse(should_exit)
         self.assertEqual(created["expression"], "recon[target=10.0.0.1]")
@@ -1016,8 +1017,8 @@ class ReconCommandTests(unittest.TestCase):
     def test_dispatch_line_routes_spaced_recon_expression(self):
         output = io.StringIO()
         original_handle_recon = recon_cmd.handle_recon
-        original_core_handle_recon = dispatch_line.__globals__["handle_recon"]
-        original_handle_new = dispatch_line.__globals__["handle_new"]
+        original_dispatch_handle_recon = dispatcher.handle_recon
+        original_handle_new = dispatcher.handle_new
         called = {"expression": ""}
         created = {"expression": "", "render_summary": None}
 
@@ -1044,8 +1045,8 @@ class ReconCommandTests(unittest.TestCase):
             return True
 
         recon_cmd.handle_recon = fake_handle_recon
-        dispatch_line.__globals__["handle_recon"] = fake_handle_recon
-        dispatch_line.__globals__["handle_new"] = fake_handle_new
+        dispatcher.handle_recon = fake_handle_recon
+        dispatcher.handle_new = fake_handle_new
         try:
             with redirect_stdout(output):
                 should_exit = dispatch_line(
@@ -1054,8 +1055,8 @@ class ReconCommandTests(unittest.TestCase):
                 )
         finally:
             recon_cmd.handle_recon = original_handle_recon
-            dispatch_line.__globals__["handle_recon"] = original_core_handle_recon
-            dispatch_line.__globals__["handle_new"] = original_handle_new
+            dispatcher.handle_recon = original_dispatch_handle_recon
+            dispatcher.handle_new = original_handle_new
 
         self.assertFalse(should_exit)
         self.assertTrue(is_recon_command("recon [target=10.0.0.1]"))
@@ -1074,8 +1075,8 @@ class ReconCommandTests(unittest.TestCase):
     def test_dispatch_line_reuses_existing_job_for_recon(self):
         output = io.StringIO()
         original_handle_recon = recon_cmd.handle_recon
-        original_core_handle_recon = dispatch_line.__globals__["handle_recon"]
-        original_handle_new = dispatch_line.__globals__["handle_new"]
+        original_dispatch_handle_recon = dispatcher.handle_recon
+        original_handle_new = dispatcher.handle_new
         called = {"expression": ""}
         created = {"count": 0}
 
@@ -1090,15 +1091,15 @@ class ReconCommandTests(unittest.TestCase):
             return True
 
         recon_cmd.handle_recon = fake_handle_recon
-        dispatch_line.__globals__["handle_recon"] = fake_handle_recon
-        dispatch_line.__globals__["handle_new"] = fake_handle_new
+        dispatcher.handle_recon = fake_handle_recon
+        dispatcher.handle_new = fake_handle_new
         try:
             with redirect_stdout(output):
                 should_exit = dispatch_line("recon[target=10.0.0.1]", ShellState(active_job="Z9Q2"))
         finally:
             recon_cmd.handle_recon = original_handle_recon
-            dispatch_line.__globals__["handle_recon"] = original_core_handle_recon
-            dispatch_line.__globals__["handle_new"] = original_handle_new
+            dispatcher.handle_recon = original_dispatch_handle_recon
+            dispatcher.handle_new = original_handle_new
 
         self.assertFalse(should_exit)
         self.assertEqual(created["count"], 0)
@@ -1108,8 +1109,8 @@ class ReconCommandTests(unittest.TestCase):
     def test_dispatch_line_does_not_auto_create_job_for_invalid_recon(self):
         output = io.StringIO()
         original_handle_recon = recon_cmd.handle_recon
-        original_core_handle_recon = dispatch_line.__globals__["handle_recon"]
-        original_handle_new = dispatch_line.__globals__["handle_new"]
+        original_dispatch_handle_recon = dispatcher.handle_recon
+        original_handle_new = dispatcher.handle_new
         created = {"count": 0}
 
         def fake_handle_recon(expression: str, *, active_job: str = "", use_color: bool | None = None) -> bool:
@@ -1121,15 +1122,15 @@ class ReconCommandTests(unittest.TestCase):
             return True
 
         recon_cmd.handle_recon = fake_handle_recon
-        dispatch_line.__globals__["handle_recon"] = fake_handle_recon
-        dispatch_line.__globals__["handle_new"] = fake_handle_new
+        dispatcher.handle_recon = fake_handle_recon
+        dispatcher.handle_new = fake_handle_new
         try:
             with redirect_stdout(output):
                 should_exit = dispatch_line("recon [targe=10.0.0.1]", ShellState())
         finally:
             recon_cmd.handle_recon = original_handle_recon
-            dispatch_line.__globals__["handle_recon"] = original_core_handle_recon
-            dispatch_line.__globals__["handle_new"] = original_handle_new
+            dispatcher.handle_recon = original_dispatch_handle_recon
+            dispatcher.handle_new = original_handle_new
 
         self.assertFalse(should_exit)
         self.assertEqual(created["count"], 0)
