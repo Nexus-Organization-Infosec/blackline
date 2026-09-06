@@ -168,18 +168,35 @@
         {
           "name": "recon",
           "kind": "tool",
-          "description": "target discovery (ip, url, email, etc.)",
-          "usage": "recon[target=<ip>,strategy=<mode>,probe=<depth>]",
-          "long_description": "perform reconnaissance on a target",
+          "description": "build an evidence-backed target profile",
+          "usage": "recon[target=<ip|domain|url>, strategy=<profile>, ...]",
+          "long_description": "collect DNS, web, TLS, registration, network, and service evidence for an authorized IP address, domain, or URL. Profile controls which checks run; scan settings affect only the service and system scan.",
           "arguments": [
-            ["target", "target ip or domain"],
-            ["strategy", "surface, balanced, quiet, fast, deep, or udp"],
-            ["probe", "surface, service, script, or fingerprint"]
+            {"name": "target", "description": "required IP address, domain, or URL"},
+            {
+              "name": "strategy",
+              "description": "scanning profile",
+              "choices": [
+                ["surface", "quick exposed-service discovery"],
+                ["fast", "accelerated common-port discovery"],
+                ["balanced", "general-purpose service discovery (default)"],
+                ["quiet", "reduced-rate, lower-traffic discovery"],
+                ["deep", "full TCP port and system/service discovery"],
+                ["udp", "UDP-focused service discovery"]
+              ]
+            },
+            {"name": "ports", "description": "custom Nmap port expression (e.g. 22, 80,443, 1-1024)"},
+            {"name": "top_ports", "description": "scan the N most common ports"},
+            {"name": "speed", "description": "timing override: low, normal, high, aggressive"},
+            {"name": "probe", "description": "enrichment override: surface, service, script, fingerprint"},
+            {"name": "transport", "description": "transport override: tcp or udp"}
           ],
           "examples": [
-            "recon[target=192.168.1.1]",
-            "recon[target=example.com,strategy=quiet,top_ports=20]",
-            "recon[target=192.168.1.1,probe=fingerprint,speed=high]"
+            "recon[target=example.com]",
+            "recon[target=10.0.0.236,strategy=surface]",
+            "recon[target=https://example.com,strategy=balanced,ports=1-1024]",
+            "recon[target=10.0.0.236,strategy=deep,speed=high,probe=fingerprint]",
+            "recon[target=10.0.0.236,transport=udp,ports=53]"
           ]
         },
         {
