@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from blackline.core.recon import ReconPipeline, build_recon_pipeline
 from blackline.core.recon.models import ReconStep
 from blackline.core.recon.scan_policy import nmap_policy_params
 from blackline.engine.context import ExecutionContext
+
+if TYPE_CHECKING:
+    from blackline.vector.candidate import Candidate
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +48,116 @@ def build_plan(context: ExecutionContext) -> ExecutionPlan:
         )
 
     return ExecutionPlan(context=context, steps=())
+
+
+def build_essential_recon_plan(context: ExecutionContext) -> ExecutionPlan:
+    """Build only the orientation work required before Vector can decide more."""
+    if context.module != "recon":
+        return build_plan(context)
+    pipeline = build_recon_pipeline(context.params.get("target", ""), params=context.params)
+    essential_tools = {"dns", "nmap"}
+    if pipeline.target.target_type == "url":
+        essential_tools.add("http")
+    steps = tuple(
+        _plan_step_from_recon_step(step, context.params)
+        for step in pipeline.steps
+        if step.tool in essential_tools
+    )
+    return ExecutionPlan(context=context, steps=steps, pipeline=pipeline)
+
+
+def build_followup_plan(context: ExecutionContext, candidates: tuple[Candidate, ...]) -> ExecutionPlan:
+    """Translate Vector capability intents into concrete tool requests.
+
+    Vector provides the capability and endpoint. This adapter owns the current
+    tool mapping, so Vector never learns binary flags or request syntax.
+    """
+    if context.module != "recon" or context.normalized_target is None:
+        return ExecutionPlan(context=context, steps=())
+    target = context.normalized_target
+    steps: list[PlanStep] = []
+    for candidate in candidates:
+        intent = candidate.intent
+        if intent.verb == "collect" and intent.subject.startswith("network_intelligence"):
+            steps.append(
+                PlanStep(
+                    tool="ipintel",
+                    action="network_intelligence",
+                    params={
+                        "target": context.params.get("target", ""),
+                        "host": target.host,
+                        "target_type": target.target_type,
+                        "deep": "true" if context.params.get("strategy", "") == "deep" else "false",
+                    },
+                    execution_group=0,
+                )
+            )
+            continue
+        endpoint = _endpoint(candidate.target, fallback=target.host)
+        if endpoint is None:
+            continue
+        host, port = endpoint
+        if intent.verb == "probe" and intent.subject in {"http", "https"}:
+            steps.append(
+                PlanStep(
+                    tool="http",
+                    action="http_ip_probe" if target.target_type == "ip" else "http_probe",
+                    params={
+                        "target": context.params.get("target", ""),
+                        "host": host,
+                        "port": str(port),
+                        "scheme": intent.subject,
+                        "path": target.path,
+                        "target_type": target.target_type,
+                    },
+                    execution_group=0,
+                )
+            )
+        elif intent.verb == "fingerprint" and intent.subject in {"http", "https"}:
+            steps.append(
+                PlanStep(
+                    tool="fingerprint",
+                    action="web_fingerprint",
+                    params={
+                        "target": context.params.get("target", ""),
+                        "host": host,
+                        "port": str(port),
+                        "scheme": intent.subject,
+                        "path": target.path,
+                        "target_type": target.target_type,
+                    },
+                    execution_group=1,
+                )
+            )
+        elif intent.verb == "inspect" and intent.subject == "tls":
+            steps.append(
+                PlanStep(
+                    tool="tls",
+                    action="tls_inspection",
+                    params={
+                        "target": context.params.get("target", ""),
+                        "host": host,
+                        "port": str(port),
+                        "server_name": target.host if target.target_type != "ip" else "",
+                    },
+                    execution_group=0,
+                )
+            )
+    return ExecutionPlan(context=context, steps=tuple(steps))
+
+
+def _endpoint(value: str, *, fallback: str) -> tuple[str, int] | None:
+    """Parse Vector's compact endpoint identity without imposing tool syntax."""
+    host, separator, raw_port = value.rpartition(":")
+    if not separator:
+        return None
+    try:
+        port = int(raw_port)
+    except ValueError:
+        return None
+    if not host:
+        host = fallback
+    return (host, port) if 1 <= port <= 65535 else None
 
 
 def _plan_step_from_recon_step(step: ReconStep, params: dict[str, str]) -> PlanStep:
