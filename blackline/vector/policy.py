@@ -22,6 +22,8 @@ class Policy:
 
     allowed_actions: frozenset[str] = field(default_factory=frozenset)
     maximum_risk: int = 0
+    max_actions_per_round: int = 1
+    cost_weight: int = 1
 
     def evaluate(self, capability: Capability, goal: Goal) -> PolicyResult:
         """Decide whether a useful capability may be scheduled."""
