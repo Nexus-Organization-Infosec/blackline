@@ -26,6 +26,9 @@ NMAP_SCAN_POLICIES: dict[str, NmapScanPolicy] = {
     "quiet": NmapScanPolicy("quiet", "quiet", top_ports="1000", timing="T2", service_detection=True),
     "deep": NmapScanPolicy("deep", "deep", ports="all", timing="T4", service_detection=True, os_detection=True),
     "udp": NmapScanPolicy("udp", "udp", top_ports="100", transport="udp"),
+    # Auto uses a stable, service-aware orientation scan. Vector decides every
+    # later action; this is only the evidence seed for that decision.
+    "auto": NmapScanPolicy("auto", "balanced", top_ports="5000", timing="T3", service_detection=True),
 }
 
 _SPEED_TO_TIMING = {"low": "T2", "normal": "T3", "high": "T4", "aggressive": "T5"}
