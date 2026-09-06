@@ -64,6 +64,16 @@ class VectorState:
         """Return services in deterministic endpoint order."""
         return tuple(sorted(self._services.values(), key=lambda service: (service.host, service.port, service.transport)))
 
+    @property
+    def observations(self) -> tuple[Observation, ...]:
+        """Return provenance-preserving observations in stable identity order."""
+        return tuple(self._observations[key] for key in sorted(self._observations))
+
+    @property
+    def tags(self) -> tuple[Observation, ...]:
+        """Return only derived metadata; it never replaces observed evidence."""
+        return tuple(observation for observation in self.observations if observation.origin == "derived")
+
     def ingest(self, observations: Iterable[Observation]) -> StateDelta:
         """Apply observations and return only the facts changed by this update."""
         changed_services: list[ServiceFact] = []
