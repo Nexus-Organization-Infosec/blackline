@@ -15,6 +15,7 @@ from blackline.config.tool_loader import get_tool_config
 from blackline.cli.commands.system.help_cmd import load_help_groups, load_operators
 from blackline.cli.commands.system.jobs_cmd import list_jobs
 from blackline.templates import TemplateRegistry
+from blackline.tools.installer import installable_tool_names
 
 STATIC_COMMANDS = (("quit", "command"),)
 COMPLETION_KINDS = frozenset({"command", "tool", "operator", "workflow", "plugin", "template", "option", "value"})
@@ -111,6 +112,10 @@ def completion_items(text: str) -> list[tuple[str, str]]:
 
     if leading.startswith("load "):
         return template_path_items(leading.removeprefix("load "))
+
+    if leading.startswith("install "):
+        prefix = leading.removeprefix("install ").strip().lower()
+        return [(tool, "tool") for tool in installable_tool_names() if tool.startswith(prefix)]
 
     if leading.startswith("list "):
         prefix = leading.removeprefix("list ").strip().lower()
@@ -253,6 +258,8 @@ def current_completion_length(text: str, word: str) -> int:
         return len(leading.removeprefix("show ").lstrip())
     if leading.startswith("load "):
         return len(leading.removeprefix("load ").lstrip())
+    if leading.startswith("install "):
+        return len(leading.removeprefix("install ").lstrip())
     if leading.startswith(("use ", "edit ", "run ")):
         return len(leading.rsplit(maxsplit=1)[-1]) if not leading.endswith(" ") else 0
     return len(word)
