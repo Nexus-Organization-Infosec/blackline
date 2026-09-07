@@ -35,6 +35,22 @@ def http_ip_probe_step(target: ReconTarget) -> ReconStep:
     )
 
 
+def httpx_probe_step(target: ReconTarget) -> ReconStep:
+    """Build an httpx confirmation step for HTTP metadata and TLS hints."""
+    return ReconStep(
+        name="httpx_probe",
+        tool="httpx",
+        inputs={
+            "target": target.raw,
+            "host": target.host,
+            "scheme": target.scheme,
+            "path": target.path,
+            "port": target.port,
+            "target_type": target.target_type,
+        },
+    )
+
+
 def http_vhost_probe_step(target: ReconTarget) -> ReconStep:
     """Build the virtual-host HTTP probe step."""
     return ReconStep(
