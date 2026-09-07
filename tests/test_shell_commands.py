@@ -13,6 +13,7 @@ from blackline.cli.commands.utils.shell_cmds import (
     handle_version,
 )
 from blackline.cli.core_shell import dispatch_line, execute_shell_line
+from blackline.storage.history_store import default_history_path, load_history
 from blackline.templates import TemplateRegistry, TemplateStorage
 
 
@@ -172,6 +173,16 @@ class ShellCommandTests(unittest.TestCase):
             self.assertEqual(state.history, [])
             self.assertFalse(history_path.exists())
             self.assertEqual(output.getvalue().strip(), "[result] history cleared")
+
+    def test_history_ignores_corrupt_or_empty_records(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            history_path = Path(tmp) / "commands.jsonl"
+            history_path.write_text('{"command": "version", "created": "now"}\nnot json\n{}\n', encoding="utf-8")
+
+            self.assertEqual([entry.command for entry in load_history(history_path=history_path)], ["version"])
+
+    def test_default_history_is_outside_the_repository(self):
+        self.assertNotIn("/blackline/blackline/storage/", str(default_history_path()))
 
 
 if __name__ == "__main__":
