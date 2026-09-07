@@ -15,7 +15,10 @@ from blackline.tools.intel.rdap import resolve_rdap
 from blackline.tools.dns.resolver import resolve_dns
 from blackline.tools.http.client import probe_http
 from blackline.tools.http.fingerprint import fingerprint_http
+from blackline.tools.http.httpx import probe_httpx
+from blackline.tools.http.whatweb import fingerprint_with_whatweb
 from blackline.tools.network.nmap import NmapRequest, display_command, execute_nmap
+from blackline.tools.network.rpcinfo import query_rpcinfo
 from blackline.tools.tls.inspector import inspect_tls
 from blackline.utils.exec import CommandResult
 
@@ -225,6 +228,85 @@ def execute_step(
             error=http_result.error,
         )
 
+    if step.tool == "httpx":
+        httpx_result = probe_httpx(
+            str(step.params.get("target", "")),
+            mode="http_ip_probe" if step.params.get("target_type") == "ip" else "http_probe",
+            host=str(step.params.get("host", "")),
+            scheme=str(step.params.get("scheme", "")),
+            path=str(step.params.get("path", "")),
+            port=str(step.params.get("port", "")),
+            timeout_seconds=timeout_seconds if timeout_seconds is not None else 10.0,
+            executor=command_executor,
+        )
+        payload = {
+            "target": httpx_result.target,
+            "provider": "httpx",
+            "findings": [
+                {
+                    "url": finding.url,
+                    "status_code": finding.status_code,
+                    "title": finding.title,
+                    "redirect_to": finding.redirect_to,
+                    "technologies": list(finding.technologies),
+                    "webserver": finding.webserver,
+                    "tls": dict(finding.tls),
+                }
+                for finding in httpx_result.findings
+            ],
+            "skipped": httpx_result.skipped,
+            "negative_observation": httpx_result.negative_observation,
+            "raw_output": httpx_result.raw_output,
+            "elapsed_seconds": httpx_result.elapsed_seconds,
+        }
+        return StepResult(step.tool, step.action, httpx_result.ok, payload, httpx_result.error)
+
+    if step.tool == "whatweb":
+        whatweb_result = fingerprint_with_whatweb(
+            str(step.params.get("target", "")),
+            mode="http_ip_probe" if step.params.get("target_type") == "ip" else "http_probe",
+            host=str(step.params.get("host", "")),
+            scheme=str(step.params.get("scheme", "")),
+            path=str(step.params.get("path", "")),
+            port=str(step.params.get("port", "")),
+            timeout_seconds=timeout_seconds or 20.0,
+            executor=command_executor,
+        )
+        payload = {
+            "target": whatweb_result.target,
+            "provider": "whatweb",
+            "findings": [
+                {"url": finding.url, "status_code": finding.status_code, "title": finding.title,
+                 "webserver": finding.webserver, "technologies": list(finding.technologies), "plugins": list(finding.plugins)}
+                for finding in whatweb_result.findings
+            ],
+            "skipped": whatweb_result.skipped,
+            "negative_observation": whatweb_result.negative_observation,
+            "raw_output": whatweb_result.raw_output,
+            "elapsed_seconds": whatweb_result.elapsed_seconds,
+        }
+        return StepResult(step.tool, step.action, whatweb_result.ok, payload, whatweb_result.error)
+
+    if step.tool == "rpcinfo":
+        rpc_result = query_rpcinfo(
+            str(step.params.get("host") or step.params.get("target") or ""),
+            timeout_seconds=timeout_seconds or 12.0,
+            executor=command_executor,
+        )
+        payload = {
+            "target": rpc_result.target,
+            "provider": "rpcinfo",
+            "registrations": [
+                {"program": item.program, "version": item.version, "protocol": item.protocol, "port": item.port, "service": item.service}
+                for item in rpc_result.registrations
+            ],
+            "skipped": rpc_result.skipped,
+            "negative_observation": rpc_result.negative_observation,
+            "raw_output": rpc_result.raw_output,
+            "elapsed_seconds": rpc_result.elapsed_seconds,
+        }
+        return StepResult(step.tool, step.action, rpc_result.ok, payload, rpc_result.error)
+
     if step.tool == "tls":
         tls_result = inspect_tls(
             str(step.params.get("host", "")),
@@ -407,6 +489,9 @@ def _step_timeout_seconds(tool: str) -> float | None:
         "dns": "dns_seconds",
         "ipintel": "ipintel_seconds",
         "http": "http_seconds",
+        "httpx": "http_seconds",
+        "whatweb": "http_fingerprint_seconds",
+        "rpcinfo": "nmap_seconds",
         "fingerprint": "http_fingerprint_seconds",
         "tls": "tls_seconds",
         "rdap": "rdap_seconds",
