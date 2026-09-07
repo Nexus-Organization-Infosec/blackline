@@ -41,6 +41,9 @@ def build_evidence_graph(target: str, payloads: dict[str, dict]) -> EvidenceGrap
     rdap = payloads.get("rdap", {})
     ipintel = payloads.get("ipintel", {})
     fingerprint = payloads.get("fingerprint", {})
+    httpx = payloads.get("httpx", {})
+    whatweb = payloads.get("whatweb", {})
+    rpcinfo = payloads.get("rpcinfo", {})
     tls = payloads.get("tls", {})
 
     dns_source = _sources(dns)
@@ -87,6 +90,53 @@ def build_evidence_graph(target: str, payloads: dict[str, dict]) -> EvidenceGrap
         _add_claim(claims, target, "served_by", server, fingerprint_source)
     if framework and framework.lower() != "unknown":
         _add_claim(claims, target, "uses_framework", framework, fingerprint_source)
+
+    httpx_source = _sources(httpx, fallback="httpx")
+    httpx_findings = httpx.get("findings", []) if isinstance(httpx, dict) else []
+    if isinstance(httpx_findings, list):
+        for finding in httpx_findings:
+            if not isinstance(finding, dict):
+                continue
+            webserver = str(finding.get("webserver", "")).strip()
+            if webserver and webserver.lower() != "unknown":
+                _add_claim(claims, target, "served_by", webserver, httpx_source)
+            technologies = finding.get("technologies", [])
+            if isinstance(technologies, list):
+                for technology in technologies:
+                    value = str(technology).strip()
+                    if value and value.lower() != "unknown":
+                        _add_claim(claims, target, "uses_technology", value, httpx_source)
+
+    whatweb_source = _sources(whatweb, fallback="whatweb")
+    whatweb_findings = whatweb.get("findings", []) if isinstance(whatweb, dict) else []
+    if isinstance(whatweb_findings, list):
+        for finding in whatweb_findings:
+            if not isinstance(finding, dict):
+                continue
+            server = str(finding.get("webserver", "")).strip()
+            if server and server.lower() != "unknown":
+                _add_claim(claims, target, "served_by", server, whatweb_source)
+            technologies = finding.get("technologies", [])
+            if isinstance(technologies, list):
+                for technology in technologies:
+                    value = str(technology).strip()
+                    if value and value.lower() != "unknown":
+                        _add_claim(claims, target, "uses_technology", value, whatweb_source)
+
+    rpcinfo_source = _sources(rpcinfo, fallback="rpcinfo")
+    rpc_records = rpcinfo.get("registrations", []) if isinstance(rpcinfo, dict) else []
+    if isinstance(rpc_records, list):
+        for record in rpc_records:
+            if not isinstance(record, dict):
+                continue
+            program = str(record.get("program", "")).strip()
+            version = str(record.get("version", "")).strip()
+            protocol = str(record.get("protocol", "")).strip()
+            port = str(record.get("port", "")).strip()
+            service = str(record.get("service", "")).strip()
+            label = service or f"program {program} v{version}".strip()
+            if label and port:
+                _add_claim(claims, target, "exposes_rpc_service", f"{label} ({protocol}/{port})", rpcinfo_source)
 
     tls_sources = _sources(tls, fallback="python ssl")
     parser = str(tls.get("certificate_parser", "")).strip() if isinstance(tls, dict) else ""
