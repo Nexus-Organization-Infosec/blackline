@@ -45,6 +45,15 @@
           "examples": ["load ./web-audit.bline", "load web-audit"]
         },
         {
+          "name": "install",
+          "kind": "command",
+          "description": "install an optional external tool",
+          "usage": "install <tool>",
+          "long_description": "install a configured optional tool using the first supported package manager on this system. Installation runs only after this explicit command.",
+          "arguments": [["tool", "configured tool name, such as httpx"]],
+          "examples": ["install httpx"]
+        },
+        {
           "name": "list",
           "kind": "command",
           "description": "list registered templates",
