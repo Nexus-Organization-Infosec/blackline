@@ -43,6 +43,13 @@ class DispatcherTests(unittest.TestCase):
         self.assertFalse(interactive_exit)
         self.assertEqual(calls, ["recon", "recon"])
 
+    def test_install_dispatches_through_the_shared_handler(self):
+        with patch.object(dispatcher, "handle_install", return_value=True) as install:
+            result = dispatcher.dispatch_command(" install  httpx ", ShellState())
+
+        self.assertEqual(result.exit_code, 0)
+        install.assert_called_once_with("httpx")
+
     def test_invalid_recon_is_reported_by_recon_handler_without_a_job(self):
         state = ShellState()
         with patch.object(dispatcher, "validate_recon_expression", return_value="invalid"), patch.object(
