@@ -19,3 +19,19 @@ def web_fingerprint_step(target: ReconTarget) -> ReconStep:
             "target_type": target.target_type,
         },
     )
+
+
+def whatweb_fingerprint_step(target: ReconTarget) -> ReconStep:
+    """Build an independent WhatWeb technology-fingerprinting step."""
+    return ReconStep(
+        name="whatweb_fingerprint",
+        tool="whatweb",
+        inputs={
+            "target": target.raw,
+            "host": target.host,
+            "scheme": target.scheme,
+            "path": target.path,
+            "port": target.port,
+            "target_type": target.target_type,
+        },
+    )
