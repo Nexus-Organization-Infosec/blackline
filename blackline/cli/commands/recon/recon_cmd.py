@@ -235,7 +235,10 @@ def _progress_label(step: PlanStep) -> str:
         "dns": "DNS lookup",
         "ipintel": "network intelligence",
         "http": "web probe",
+        "httpx": "httpx service confirmation",
         "fingerprint": "web fingerprint",
+        "whatweb": "WhatWeb fingerprint",
+        "rpcinfo": "RPC program registry",
         "tls": "TLS certificate inspection",
         "rdap": "RDAP registration and ownership",
         "nmap": "service and system scan",
@@ -344,7 +347,10 @@ def render_recon_report(payloads: dict[str, dict], *, use_color: bool | None = N
     ipintel = payloads.get("ipintel", {})
     dns = payloads.get("dns", {})
     http = payloads.get("http", {})
+    httpx = payloads.get("httpx", {})
     fingerprint = payloads.get("fingerprint", {})
+    whatweb = payloads.get("whatweb", {})
+    rpcinfo = payloads.get("rpcinfo", {})
     tls = payloads.get("tls", {})
     rdap = payloads.get("rdap", {})
     correlation = payloads.get("correlation", {})
@@ -356,8 +362,14 @@ def render_recon_report(payloads: dict[str, dict], *, use_color: bool | None = N
         _render_dns_report(dns, use_color=use_color)
     if http:
         _render_web_section(http, use_color=use_color)
+    if httpx:
+        _render_httpx_section(httpx, use_color=use_color)
     if fingerprint:
         _render_web_fingerprint_section(fingerprint, use_color=use_color)
+    if whatweb:
+        _render_whatweb_section(whatweb, use_color=use_color)
+    if rpcinfo:
+        _render_rpcinfo_section(rpcinfo, use_color=use_color)
     if tls:
         _render_tls_section(tls, use_color=use_color)
     if rdap:
@@ -420,6 +432,92 @@ def _render_web_section(payload: dict, *, use_color: bool | None = None) -> None
             rendered = True
     if not rendered:
         _render_field("status", "unavailable", use_color=use_color)
+    write_line(use_color=use_color)
+
+
+def _render_httpx_section(payload: dict, *, use_color: bool | None = None) -> None:
+    """Render HTTP service confirmation from httpx without raw JSON noise."""
+    _render_section_header("http services", _provider_names(payload, fallback="httpx"), use_color=use_color)
+    if payload.get("skipped"):
+        _render_field("status", "skipped (httpx unavailable; run install httpx)", use_color=use_color)
+        write_line(use_color=use_color)
+        return
+    findings = payload.get("findings", [])
+    if not isinstance(findings, list) or not findings:
+        _render_field("status", "no HTTP service confirmed", use_color=use_color)
+        write_line(use_color=use_color)
+        return
+    for finding in findings:
+        if not isinstance(finding, dict):
+            continue
+        endpoint = str(finding.get("url", "")).strip() or "unknown"
+        status = str(finding.get("status_code") or "unknown")
+        title = str(finding.get("title", "")).strip()
+        value = status if not title else f"{status}  {title}"
+        redirect = str(finding.get("redirect_to", "")).strip()
+        if redirect:
+            value = f"{value}  -> {redirect}"
+        _render_field(endpoint, value, use_color=use_color)
+        technologies = finding.get("technologies", [])
+        if isinstance(technologies, list) and technologies:
+            _render_field("technologies", ", ".join(str(item) for item in technologies), use_color=use_color)
+        webserver = str(finding.get("webserver", "")).strip()
+        if webserver:
+            _render_field("server", webserver, use_color=use_color)
+        tls = finding.get("tls", {})
+        if isinstance(tls, dict):
+            protocol = str(tls.get("protocol", tls.get("tls_version", ""))).strip()
+            if protocol:
+                _render_field("tls", protocol, use_color=use_color)
+    write_line(use_color=use_color)
+
+
+def _render_whatweb_section(payload: dict, *, use_color: bool | None = None) -> None:
+    """Render WhatWeb technology evidence without exposing raw plugin JSON."""
+    _render_section_header("whatweb", _provider_names(payload, fallback="whatweb"), use_color=use_color)
+    if payload.get("skipped"):
+        _render_field("status", "skipped (WhatWeb unavailable; run install whatweb)", use_color=use_color)
+        write_line(use_color=use_color)
+        return
+    findings = payload.get("findings", [])
+    if not isinstance(findings, list) or not findings:
+        _render_field("status", "no web technologies identified", use_color=use_color)
+        write_line(use_color=use_color)
+        return
+    for finding in findings:
+        if not isinstance(finding, dict):
+            continue
+        endpoint = str(finding.get("url", "")).strip() or "unknown"
+        status = str(finding.get("status_code") or "unknown")
+        title = str(finding.get("title", "")).strip()
+        _render_field(endpoint, status if not title else f"{status}  {title}", use_color=use_color)
+        technologies = finding.get("technologies", [])
+        if isinstance(technologies, list) and technologies:
+            _render_field("technologies", ", ".join(str(item) for item in technologies), use_color=use_color)
+        server = str(finding.get("webserver", "")).strip()
+        if server:
+            _render_field("server", server, use_color=use_color)
+    write_line(use_color=use_color)
+
+
+def _render_rpcinfo_section(payload: dict, *, use_color: bool | None = None) -> None:
+    """Render registered portmapper programs as concise structured evidence."""
+    _render_section_header("rpc services", _provider_names(payload, fallback="rpcinfo"), use_color=use_color)
+    if payload.get("skipped"):
+        _render_field("status", "skipped (rpcinfo unavailable; run install rpcinfo)", use_color=use_color)
+        write_line(use_color=use_color)
+        return
+    records = payload.get("registrations", [])
+    if not isinstance(records, list) or not records:
+        _render_field("status", "no RPC programs registered", use_color=use_color)
+        write_line(use_color=use_color)
+        return
+    write_line("PROGRAM   VERS   PROTO   PORT    SERVICE", color="muted", use_color=use_color)
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        row = f"{str(record.get('program', '')).ljust(9)} {str(record.get('version', '')).ljust(6)} {str(record.get('protocol', '')).ljust(7)} {str(record.get('port', '')).ljust(7)} {record.get('service', '')}".rstrip()
+        write_line(row, use_color=use_color)
     write_line(use_color=use_color)
 
 
@@ -524,6 +622,8 @@ def _render_correlation_section(payload: dict, *, use_color: bool | None = None)
     _render_correlation_values("asn", normalized, "announced_by", use_color=use_color)
     _render_correlation_values("web edge", normalized, "served_by", use_color=use_color)
     _render_correlation_values("framework", normalized, "uses_framework", use_color=use_color)
+    _render_correlation_values("technology", normalized, "uses_technology", use_color=use_color)
+    _render_correlation_values("rpc services", normalized, "exposes_rpc_service", use_color=use_color)
     _render_correlation_values("tls names", normalized, "presents_tls_name", use_color=use_color)
     write_line(use_color=use_color)
 
