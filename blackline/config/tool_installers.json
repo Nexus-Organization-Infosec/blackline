@@ -1,0 +1,69 @@
+{
+  "tools": {
+    "httpx": {
+      "binary": "httpx",
+      "platforms": {
+        "Darwin": [
+          {
+            "manager": "Homebrew",
+            "manager_binary": "brew",
+            "command": ["brew", "install", "httpx"]
+          },
+          {
+            "manager": "Go",
+            "manager_binary": "go",
+            "command": ["go", "install", "github.com/projectdiscovery/httpx/cmd/httpx@latest"]
+          }
+        ],
+        "Linux": [
+          {
+            "manager": "Go",
+            "manager_binary": "go",
+            "command": ["go", "install", "github.com/projectdiscovery/httpx/cmd/httpx@latest"]
+          },
+          {
+            "manager": "Homebrew",
+            "manager_binary": "brew",
+            "command": ["brew", "install", "httpx"]
+          }
+        ],
+        "Windows": [
+          {
+            "manager": "winget",
+            "manager_binary": "winget",
+            "command": ["winget", "install", "--id", "ProjectDiscovery.httpx", "--exact", "--accept-package-agreements", "--accept-source-agreements"]
+          },
+          {
+            "manager": "Scoop",
+            "manager_binary": "scoop",
+            "command": ["scoop", "install", "httpx"]
+          },
+          {
+            "manager": "Go",
+            "manager_binary": "go",
+            "command": ["go", "install", "github.com/projectdiscovery/httpx/cmd/httpx@latest"]
+          }
+        ]
+      }
+    },
+    "whatweb": {
+      "binary": "whatweb",
+      "platforms": {
+        "Darwin": [
+          {"manager": "Homebrew", "manager_binary": "brew", "command": ["brew", "install", "whatweb"]}
+        ],
+        "Linux": [
+          {"manager": "APT", "manager_binary": "apt-get", "command": ["apt-get", "install", "-y", "whatweb"]}
+        ]
+      }
+    },
+    "rpcinfo": {
+      "binary": "rpcinfo",
+      "platforms": {
+        "Linux": [
+          {"manager": "APT", "manager_binary": "apt-get", "command": ["apt-get", "install", "-y", "rpcbind"]}
+        ]
+      }
+    }
+  }
+}
