@@ -28,6 +28,10 @@ class EvidenceGraphTests(unittest.TestCase):
                 "asn": "AS13335",
             },
             "fingerprint": {"provider": "urllib", "server": "cloudflare", "framework": "Next.js"},
+            "httpx": {
+                "provider": "httpx",
+                "findings": [{"webserver": "cloudflare", "technologies": ["Next.js", "React"]}],
+            },
             "tls": {
                 "provider": "python ssl",
                 "certificate_parser": "openssl",
@@ -41,6 +45,7 @@ class EvidenceGraphTests(unittest.TestCase):
         address_claim = next(claim for claim in graph.claims if claim.predicate == "resolves_to" and claim.value == "172.66.157.115")
         self.assertEqual(address_claim.sources, ("dnspython", "rdap.org", "yougotmapped"))
         self.assertEqual(graph.values("announced_by"), ("AS13335",))
+        self.assertEqual(graph.values("uses_technology"), ("Next.js", "React"))
         self.assertEqual(graph.values("presents_tls_name"), ("owasp.org", "www.owasp.org"))
 
     def test_correlation_report_renders_cross_tool_joins(self):
@@ -50,10 +55,11 @@ class EvidenceGraphTests(unittest.TestCase):
             render_recon_report({"correlation": graph.to_dict()}, use_color=False)
 
         text = output.getvalue()
-        self.assertIn("correlation  (sources: dnspython, rdap.org, yougotmapped, urllib, python ssl, openssl)", text)
+        self.assertIn("correlation  (sources: dnspython, rdap.org, yougotmapped, urllib, httpx, python ssl, openssl)", text)
         self.assertIn("addresses  : 172.66.157.115", text)
         self.assertIn("ownership  : Cloudflare, Inc.", text)
         self.assertIn("web edge   : cloudflare", text)
+        self.assertIn("technology : Next.js, React", text)
         self.assertIn("tls names  : owasp.org, www.owasp.org", text)
 
 
