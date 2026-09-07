@@ -36,6 +36,22 @@ def get_tool_config(name: str) -> dict[str, Any]:
     return config if isinstance(config, dict) else {}
 
 
+@lru_cache(maxsize=1)
+def get_tool_installer_config() -> dict[str, Any]:
+    """Load declarative external-tool installer recipes."""
+    path = Path(__file__).resolve().parent / "tool_installers.json"
+    try:
+        with path.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+    except FileNotFoundError:
+        _report_config_error(f"missing config: {path}")
+        return {}
+    except (OSError, json.JSONDecodeError) as exc:
+        _report_config_error(f"failed to load config {path}: {exc}")
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 @lru_cache(maxsize=None)
 def get_vector_config(name: str) -> dict[str, Any]:
     """Return one Vector policy/catalog configuration from ``config/vector``."""
@@ -55,6 +71,7 @@ def get_vector_config(name: str) -> dict[str, Any]:
 def clear_tool_config_cache() -> None:
     """Clear cached tool configuration for tests/reloads."""
     load_tools_config.cache_clear()
+    get_tool_installer_config.cache_clear()
     get_vector_config.cache_clear()
 
 
