@@ -11,6 +11,7 @@ from blackline.cli.commands.recon.recon_cmd import handle_recon, validate_recon_
 from blackline.cli.commands.system.help_cmd import handle_help
 from blackline.cli.commands.system.jobs_cmd import handle_delete_job, handle_enter, handle_jobs, handle_new, handle_show
 from blackline.cli.commands.templates.template_cmd import handle_edit, handle_list_templates, handle_load, handle_run, handle_use
+from blackline.cli.commands.utils.tool_install_cmd import handle_install
 from blackline.cli.commands.utils.shell_cmds import (
     ShellState,
     handle_clear,
@@ -120,6 +121,8 @@ def dispatch_command(
         return DispatchResult(exit_code=0 if handle_list_templates(state) else 1)
     if command.name == "load":
         return DispatchResult(exit_code=0 if handle_load(command.argument, state) else 1)
+    if command.name == "install":
+        return DispatchResult(exit_code=0 if handle_install(command.argument) else 1)
     if command.name == "use":
         return DispatchResult(exit_code=0 if handle_use(command.argument, state) else 1)
     if command.name == "edit":
