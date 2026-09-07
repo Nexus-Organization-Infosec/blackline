@@ -17,6 +17,7 @@ from blackline.cli.dispatcher import dispatch_command, is_recon_command
 from blackline.cli.ui.display import info, write_segments
 from blackline.cli.ui.elements import prompt_line
 from blackline.cli.ui.live_input import create_prompt_session, prompt_fragments
+from blackline.storage.history_store import load_history
 from blackline.utils.tab_complete import ReadlineCompleter
 
 _COMPLETER: ReadlineCompleter | None = None
@@ -25,10 +26,11 @@ _COMPLETER: ReadlineCompleter | None = None
 def run_shell() -> int:
     """Run a minimal interactive shell."""
     state = ShellState()
-    session = create_prompt_session()
+    history_entries = tuple(entry.command for entry in load_history())
+    session = create_prompt_session(history_entries=history_entries)
     state.prompt_session = session
     if session is None:
-        configure_tab_completion()
+        configure_tab_completion(history_entries=history_entries)
     while True:
         try:
             refresh_sudo_state(state)
@@ -63,14 +65,17 @@ def execute_shell_line(line: str, state: ShellState | None = None) -> bool:
     return should_exit
 
 
-def configure_tab_completion() -> None:
-    """Enable readline tab completion for the interactive shell."""
+def configure_tab_completion(*, history_entries: tuple[str, ...] = ()) -> None:
+    """Enable readline completion and restore persisted history on fallback shells."""
     if readline is None:
         return
 
     global _COMPLETER
     completer = ReadlineCompleter()
     _COMPLETER = completer
+    readline.clear_history()
+    for entry in history_entries:
+        readline.add_history(entry)
     readline.set_completer(completer.complete)
     if "libedit" in (readline.__doc__ or ""):
         readline.parse_and_bind("bind ^I rl_complete")
