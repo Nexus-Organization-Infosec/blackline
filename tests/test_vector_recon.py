@@ -42,7 +42,7 @@ class VectorReconTests(unittest.TestCase):
         self.assertTrue(all(tag.source_evidence for tag in vector.state.tags))
 
         followup = execute_followup_plan(self.context, decision)
-        self.assertEqual([step.tool for step in followup.steps], ["http", "fingerprint"])
+        self.assertEqual([step.tool for step in followup.steps], ["httpx", "fingerprint"])
         self.assertEqual([step.params["port"] for step in followup.steps], ["3000", "3000"])
 
     def test_completed_actions_are_not_reintroduced_by_later_evidence(self):
@@ -105,10 +105,10 @@ class VectorReconTests(unittest.TestCase):
                 vector_callback=rounds.append,
             )
 
-        self.assertEqual(calls, [["nmap"], ["http", "fingerprint"]])
+        self.assertEqual(calls, [["nmap"], ["httpx", "fingerprint"]])
         self.assertEqual([round_.number for round_ in rounds], [1, 2])
         self.assertEqual(len(run.rounds), 2)
-        self.assertEqual([result.tool for result in run.results], ["nmap", "http", "fingerprint"])
+        self.assertEqual([result.tool for result in run.results], ["nmap", "httpx", "fingerprint"])
 
     def test_non_auto_strategy_keeps_the_original_single_pass_runner(self):
         plans = []
@@ -116,5 +116,5 @@ class VectorReconTests(unittest.TestCase):
             run = run_expression("recon[target=10.0.0.174,strategy=balanced]")
 
         self.assertEqual(len(plans), 1)
-        self.assertEqual([step.tool for step in plans[0].steps], ["ipintel", "http", "fingerprint", "tls", "rdap", "nmap"])
+        self.assertEqual([step.tool for step in plans[0].steps], ["ipintel", "http", "httpx", "fingerprint", "whatweb", "tls", "rdap", "rpcinfo", "nmap"])
         self.assertEqual(run.rounds, ())
