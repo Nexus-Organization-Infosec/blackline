@@ -101,6 +101,18 @@
         }
       }
     },
+    "httpx": {
+      "binary": "httpx",
+      "flags": ["-json", "-sc", "-title", "-location", "-td", "-tls-grab", "-silent"]
+    },
+    "whatweb": {
+      "binary": "whatweb",
+      "flags": ["--aggression=1", "--no-errors", "--quiet", "--color=never"]
+    },
+    "rpcinfo": {
+      "binary": "rpcinfo",
+      "flags": ["-p"]
+    },
     "yougotmapped": {
       "binary": "yougotmapped",
       "defaults": {
