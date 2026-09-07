@@ -130,6 +130,32 @@ def observations_from_results(results: Iterable[StepResult], *, fallback_host: s
             for finding_index, finding in enumerate(payload.get("findings", ())):
                 if isinstance(finding, dict):
                     observations.append(_tag("web", str(finding.get("url", "") or fallback_host), "reachable" if finding.get("ok") else "closed", source, 0.95 if finding.get("ok") else 0.8, (f"http:{result_index}:{finding_index}",)))
+        elif result.tool == "httpx":
+            for finding_index, finding in enumerate(payload.get("findings", ())):
+                if not isinstance(finding, dict):
+                    continue
+                endpoint = str(finding.get("url", "") or fallback_host)
+                observations.append(_tag("web", endpoint, "reachable", source, 0.95, (f"httpx:{result_index}:{finding_index}",)))
+                for technology in finding.get("technologies", ()):
+                    value = str(technology).strip().lower()
+                    if value:
+                        observations.append(_tag("technology", value, "found", source, 0.8, (f"httpx:{result_index}:{finding_index}",)))
+        elif result.tool == "whatweb":
+            for finding_index, finding in enumerate(payload.get("findings", ())):
+                if not isinstance(finding, dict):
+                    continue
+                for technology in finding.get("technologies", ()):
+                    value = str(technology).strip().lower()
+                    if value:
+                        observations.append(_tag("technology", value, "found", source, 0.85, (f"whatweb:{result_index}:{finding_index}",)))
+        elif result.tool == "rpcinfo":
+            for registration_index, registration in enumerate(payload.get("registrations", ())):
+                if not isinstance(registration, dict):
+                    continue
+                program = str(registration.get("program", "")).strip()
+                port = str(registration.get("port", "")).strip()
+                if program and port:
+                    observations.append(_tag("rpc_program", f"{program}:{port}", "registered", source, 0.95, (f"rpcinfo:{result_index}:{registration_index}",)))
         elif result.tool == "dns":
             records = payload.get("records", {})
             if isinstance(records, dict):
