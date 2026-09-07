@@ -42,7 +42,7 @@ def build_plan(context: ExecutionContext) -> ExecutionPlan:
             steps=tuple(
                 _plan_step_from_recon_step(step, context.params)
                 for step in pipeline.steps
-                if step.tool in {"dns", "ipintel", "http", "fingerprint", "tls", "rdap", "nmap"}
+                if step.tool in {"dns", "ipintel", "http", "httpx", "fingerprint", "whatweb", "tls", "rdap", "rpcinfo", "nmap"}
             ),
             pipeline=pipeline,
         )
@@ -100,8 +100,8 @@ def build_followup_plan(context: ExecutionContext, candidates: tuple[Candidate, 
         if intent.verb == "probe" and intent.subject in {"http", "https"}:
             steps.append(
                 PlanStep(
-                    tool="http",
-                    action="http_ip_probe" if target.target_type == "ip" else "http_probe",
+                    tool="httpx",
+                    action="httpx_probe",
                     params={
                         "target": context.params.get("target", ""),
                         "host": host,
@@ -185,6 +185,22 @@ def _plan_step_from_recon_step(step: ReconStep, params: dict[str, str]) -> PlanS
             execution_group=_execution_group(step),
         )
 
+    if step.tool == "httpx":
+        return PlanStep(
+            tool="httpx",
+            action=step.name,
+            params={key: str(value) for key, value in step.inputs.items()},
+            execution_group=_execution_group(step),
+        )
+
+    if step.tool == "whatweb":
+        return PlanStep(
+            tool="whatweb",
+            action=step.name,
+            params={key: str(value) for key, value in step.inputs.items()},
+            execution_group=_execution_group(step),
+        )
+
     if step.tool == "fingerprint":
         return PlanStep(
             tool="fingerprint",
@@ -196,6 +212,14 @@ def _plan_step_from_recon_step(step: ReconStep, params: dict[str, str]) -> PlanS
     if step.tool == "rdap":
         return PlanStep(
             tool="rdap",
+            action=step.name,
+            params={key: str(value) for key, value in step.inputs.items()},
+            execution_group=_execution_group(step),
+        )
+
+    if step.tool == "rpcinfo":
+        return PlanStep(
+            tool="rpcinfo",
             action=step.name,
             params={key: str(value) for key, value in step.inputs.items()},
             execution_group=_execution_group(step),
@@ -235,9 +259,11 @@ def _execution_group(step: ReconStep) -> int:
         return 1 if target_type == "ip" else 2
     if step.tool == "ipintel":
         return 0 if target_type == "ip" else 1
-    if step.tool in {"dns", "http", "tls"}:
+    if step.tool in {"dns", "http", "httpx", "tls"}:
         return 0
-    if step.tool == "fingerprint":
+    if step.tool == "rpcinfo":
+        return 1
+    if step.tool in {"fingerprint", "whatweb"}:
         return 1
     if step.tool == "rdap":
         return 2
