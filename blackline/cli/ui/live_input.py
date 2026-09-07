@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from typing import Any
+from typing import Any, Iterable
 
 from blackline.utils.tab_complete import command_spans, completion_items, current_completion_length
 
@@ -11,11 +11,12 @@ PromptFragments = list[tuple[str, str]]
 _REPORTED_UI_ERRORS: set[str] = set()
 
 
-def create_prompt_session() -> Any | None:
+def create_prompt_session(*, history_entries: Iterable[str] = ()) -> Any | None:
     """Create a rich prompt session when prompt_toolkit is installed."""
     try:
         from prompt_toolkit import PromptSession
         from prompt_toolkit.completion import Completer, Completion
+        from prompt_toolkit.history import InMemoryHistory
         from prompt_toolkit.key_binding import KeyBindings
         from prompt_toolkit.lexers import Lexer
         from prompt_toolkit.styles import Style
@@ -61,6 +62,7 @@ def create_prompt_session() -> Any | None:
         buffer.validate_and_handle()
 
     return PromptSession(
+        history=InMemoryHistory(list(history_entries)),
         completer=BlacklineCompleter(),
         complete_while_typing=True,
         key_bindings=bindings,
