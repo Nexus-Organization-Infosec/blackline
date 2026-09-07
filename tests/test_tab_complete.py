@@ -33,6 +33,11 @@ class TabCompleteTests(unittest.TestCase):
         self.assertIn(("network", "tool"), items)
         self.assertIn(("recon", "tool"), items)
         self.assertIn(("exploit", "tool"), items)
+        self.assertIn(("install", "command"), items)
+
+    def test_install_completion_uses_configured_installer_tools(self):
+        self.assertIn(("httpx", "tool"), completion_items("install ht"))
+        self.assertEqual(current_completion_length("install ht", "ht"), 2)
 
     def test_help_completion_loads_topics_from_config(self):
         suggestions = complete_text("help rec")
