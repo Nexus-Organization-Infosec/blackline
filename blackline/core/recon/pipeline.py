@@ -11,18 +11,20 @@ from blackline.core.recon.steps.ipintel import ipintel_step
 from blackline.core.recon.steps.port_scan import port_scan_step
 from blackline.core.recon.steps.rdap import rdap_step
 from blackline.core.recon.steps.rpcinfo import rpcinfo_step
+from blackline.core.recon.steps.subfinder import subfinder_step
 from blackline.core.recon.steps.tls import tls_inspection_step
+from blackline.core.recon.steps.sslyze import sslyze_step
 from blackline.core.recon.steps.web_fingerprint import web_fingerprint_step, whatweb_fingerprint_step
 
 PROFILE_TOOLS: dict[str, frozenset[str]] = {
     # Surface and fast still take a deliberately bounded Nmap snapshot.
-    "surface": frozenset({"dns", "http", "httpx", "fingerprint", "whatweb", "tls", "rdap", "rpcinfo", "nmap"}),
-    "fast": frozenset({"dns", "http", "httpx", "fingerprint", "whatweb", "tls", "rdap", "rpcinfo", "nmap"}),
+    "surface": frozenset({"dns", "subfinder", "http", "httpx", "fingerprint", "whatweb", "tls", "sslyze", "rdap", "rpcinfo", "nmap"}),
+    "fast": frozenset({"dns", "subfinder", "http", "httpx", "fingerprint", "whatweb", "tls", "sslyze", "rdap", "rpcinfo", "nmap"}),
     # These profiles keep Blackline's independent evidence layers available.
-    "balanced": frozenset({"dns", "ipintel", "http", "httpx", "fingerprint", "whatweb", "tls", "rdap", "rpcinfo", "nmap"}),
-    "quiet": frozenset({"dns", "ipintel", "http", "httpx", "fingerprint", "whatweb", "tls", "rdap", "rpcinfo", "nmap"}),
-    "deep": frozenset({"dns", "ipintel", "http", "httpx", "fingerprint", "whatweb", "tls", "rdap", "rpcinfo", "nmap"}),
-    "udp": frozenset({"dns", "ipintel", "http", "httpx", "fingerprint", "whatweb", "tls", "rdap", "rpcinfo", "nmap"}),
+    "balanced": frozenset({"dns", "subfinder", "ipintel", "http", "httpx", "fingerprint", "whatweb", "tls", "sslyze", "rdap", "rpcinfo", "nmap"}),
+    "quiet": frozenset({"dns", "subfinder", "ipintel", "http", "httpx", "fingerprint", "whatweb", "tls", "sslyze", "rdap", "rpcinfo", "nmap"}),
+    "deep": frozenset({"dns", "subfinder", "ipintel", "http", "httpx", "fingerprint", "whatweb", "tls", "sslyze", "rdap", "rpcinfo", "nmap"}),
+    "udp": frozenset({"dns", "subfinder", "ipintel", "http", "httpx", "fingerprint", "whatweb", "tls", "sslyze", "rdap", "rpcinfo", "nmap"}),
 }
 PROFILE_TOOLS["auto"] = PROFILE_TOOLS["balanced"]
 
@@ -53,6 +55,7 @@ def _steps_for_target(target: ReconTarget, params: dict[str, str]) -> tuple[Reco
             web_fingerprint_step(target),
             whatweb_fingerprint_step(target),
             tls_inspection_step(target),
+            sslyze_step(target),
             rdap_step(target),
             rpcinfo_step(target),
             port_scan_step(target, params),
@@ -62,12 +65,14 @@ def _steps_for_target(target: ReconTarget, params: dict[str, str]) -> tuple[Reco
     if target.target_type == "domain":
         steps = (
             dns_step(target),
+            subfinder_step(target),
             ipintel_step(target, params),
             http_probe_step(target),
             httpx_probe_step(target),
             web_fingerprint_step(target),
             whatweb_fingerprint_step(target),
             tls_inspection_step(target),
+            sslyze_step(target),
             rdap_step(target),
             rpcinfo_step(target),
             port_scan_step(target, params),
@@ -84,7 +89,7 @@ def _steps_for_target(target: ReconTarget, params: dict[str, str]) -> tuple[Reco
             ipintel_step(target, params),
         )
         if target.scheme == "https" or target.port == "443":
-            steps += (tls_inspection_step(target),)
+            steps += (tls_inspection_step(target), sslyze_step(target))
         return _select_profile_steps(steps + (rdap_step(target), port_scan_step(target, params)), profile)
 
     return ()
