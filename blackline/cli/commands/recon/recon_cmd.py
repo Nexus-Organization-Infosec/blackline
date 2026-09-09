@@ -239,6 +239,7 @@ def _progress_label(step: PlanStep) -> str:
         "httpx": "httpx service confirmation",
         "fingerprint": "web fingerprint",
         "whatweb": "WhatWeb fingerprint",
+        "katana": "web crawl",
         "rpcinfo": "RPC program registry",
         "sslyze": "TLS configuration analysis",
         "tls": "TLS certificate inspection",
@@ -353,6 +354,7 @@ def render_recon_report(payloads: dict[str, dict], *, use_color: bool | None = N
     httpx = payloads.get("httpx", {})
     fingerprint = payloads.get("fingerprint", {})
     whatweb = payloads.get("whatweb", {})
+    katana = payloads.get("katana", {})
     rpcinfo = payloads.get("rpcinfo", {})
     sslyze = payloads.get("sslyze", {})
     tls = payloads.get("tls", {})
@@ -374,6 +376,8 @@ def render_recon_report(payloads: dict[str, dict], *, use_color: bool | None = N
         _render_web_fingerprint_section(fingerprint, use_color=use_color)
     if whatweb:
         _render_whatweb_section(whatweb, use_color=use_color)
+    if katana:
+        _render_katana_section(katana, use_color=use_color)
     if rpcinfo:
         _render_rpcinfo_section(rpcinfo, use_color=use_color)
     if sslyze:
@@ -532,6 +536,38 @@ def _render_whatweb_section(payload: dict, *, use_color: bool | None = None) -> 
     write_line(use_color=use_color)
 
 
+def _render_katana_section(payload: dict, *, use_color: bool | None = None) -> None:
+    """Render a bounded endpoint inventory from Katana crawl evidence."""
+    _render_section_header("web crawl", _provider_names(payload, fallback="katana"), use_color=use_color)
+    if payload.get("skipped"):
+        _render_field("status", "skipped (Katana unavailable; run install katana)", use_color=use_color)
+        write_line(use_color=use_color)
+        return
+    findings = payload.get("findings", [])
+    if not isinstance(findings, list) or not findings:
+        _render_field("status", "no crawlable endpoints discovered", use_color=use_color)
+        write_line(use_color=use_color)
+        return
+    _render_field("pages", str(len(findings)), use_color=use_color)
+    for finding in findings[:12]:
+        if not isinstance(finding, dict):
+            continue
+        url = str(finding.get("url", "")).strip()
+        if not url:
+            continue
+        status = str(finding.get("status_code") or "unknown")
+        method = str(finding.get("method") or "GET")
+        title = str(finding.get("title") or "").strip()
+        value = f"{status}  {method}" + (f"  {title}" if title else "")
+        _render_field(url, value, use_color=use_color)
+        technologies = finding.get("technologies", [])
+        if isinstance(technologies, list) and technologies:
+            _render_field("technologies", ", ".join(str(item) for item in technologies), use_color=use_color)
+    if len(findings) > 12:
+        _render_field("more", f"{len(findings) - 12} endpoints in show raw", use_color=use_color)
+    write_line(use_color=use_color)
+
+
 def _render_rpcinfo_section(payload: dict, *, use_color: bool | None = None) -> None:
     """Render registered portmapper programs as concise structured evidence."""
     _render_section_header("rpc services", _provider_names(payload, fallback="rpcinfo"), use_color=use_color)
@@ -680,6 +716,7 @@ def _render_correlation_section(payload: dict, *, use_color: bool | None = None)
     _render_field("target", str(payload.get("target") or "unknown"), use_color=use_color)
     _render_correlation_values("addresses", normalized, "resolves_to", use_color=use_color)
     _render_correlation_values("subdomains", normalized, "discovers_subdomain", use_color=use_color)
+    _render_correlation_values("endpoints", normalized, "discovers_endpoint", use_color=use_color)
     _render_correlation_values("ownership", normalized, "owned_by", use_color=use_color)
     _render_correlation_values("asn", normalized, "announced_by", use_color=use_color)
     _render_correlation_values("web edge", normalized, "served_by", use_color=use_color)
