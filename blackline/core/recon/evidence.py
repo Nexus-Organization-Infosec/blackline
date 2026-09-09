@@ -38,12 +38,14 @@ def build_evidence_graph(target: str, payloads: dict[str, dict]) -> EvidenceGrap
     claims: list[EvidenceClaim] = []
     target = target.strip() or _target_from_payloads(payloads)
     dns = payloads.get("dns", {})
+    subfinder = payloads.get("subfinder", {})
     rdap = payloads.get("rdap", {})
     ipintel = payloads.get("ipintel", {})
     fingerprint = payloads.get("fingerprint", {})
     httpx = payloads.get("httpx", {})
     whatweb = payloads.get("whatweb", {})
     rpcinfo = payloads.get("rpcinfo", {})
+    sslyze = payloads.get("sslyze", {})
     tls = payloads.get("tls", {})
 
     dns_source = _sources(dns)
@@ -54,6 +56,17 @@ def build_evidence_graph(target: str, payloads: dict[str, dict]) -> EvidenceGrap
             if isinstance(values, list):
                 for address in values:
                     _add_claim(claims, target, "resolves_to", str(address), dns_source)
+
+    subfinder_source = _sources(subfinder, fallback="subfinder")
+    subdomains = subfinder.get("subdomains", []) if isinstance(subfinder, dict) else []
+    if isinstance(subdomains, list):
+        for finding in subdomains:
+            if not isinstance(finding, dict):
+                continue
+            host = str(finding.get("host", "")).strip()
+            sources = finding.get("sources", [])
+            finding_sources = tuple(str(source).strip() for source in sources if str(source).strip()) if isinstance(sources, list) else ()
+            _add_claim(claims, target, "discovers_subdomain", host, finding_sources or subfinder_source)
 
     rdap_source = _sources(rdap, fallback="rdap.org")
     domain = str(rdap.get("domain", "")).strip() if isinstance(rdap, dict) else ""
@@ -137,6 +150,21 @@ def build_evidence_graph(target: str, payloads: dict[str, dict]) -> EvidenceGrap
             label = service or f"program {program} v{version}".strip()
             if label and port:
                 _add_claim(claims, target, "exposes_rpc_service", f"{label} ({protocol}/{port})", rpcinfo_source)
+
+    sslyze_source = _sources(sslyze, fallback="sslyze")
+    sslyze_scans = sslyze.get("scans", []) if isinstance(sslyze, dict) else []
+    if isinstance(sslyze_scans, list):
+        for scan in sslyze_scans:
+            if not isinstance(scan, dict):
+                continue
+            for protocol in scan.get("protocols", []):
+                value = str(protocol).strip()
+                if value:
+                    _add_claim(claims, target, "supports_tls_protocol", value, sslyze_source)
+            for finding in scan.get("findings", []):
+                value = str(finding).strip()
+                if value:
+                    _add_claim(claims, target, "has_tls_finding", value, sslyze_source)
 
     tls_sources = _sources(tls, fallback="python ssl")
     parser = str(tls.get("certificate_parser", "")).strip() if isinstance(tls, dict) else ""
