@@ -156,12 +156,27 @@ def observations_from_results(results: Iterable[StepResult], *, fallback_host: s
                 port = str(registration.get("port", "")).strip()
                 if program and port:
                     observations.append(_tag("rpc_program", f"{program}:{port}", "registered", source, 0.95, (f"rpcinfo:{result_index}:{registration_index}",)))
+        elif result.tool == "sslyze":
+            for scan_index, scan in enumerate(payload.get("scans", ())):
+                if not isinstance(scan, dict):
+                    continue
+                for finding in scan.get("findings", ()):
+                    value = str(finding).strip().lower()
+                    if value:
+                        observations.append(_tag("tls_finding", value, "found", source, 0.95, (f"sslyze:{result_index}:{scan_index}",)))
         elif result.tool == "dns":
             records = payload.get("records", {})
             if isinstance(records, dict):
                 for record_type in ("A", "AAAA"):
                     for address in records.get(record_type, ()):
                         observations.append(_tag("address", str(address), "found", source, 0.95, (f"dns:{result_index}:{record_type}",)))
+        elif result.tool == "subfinder":
+            for finding_index, finding in enumerate(payload.get("subdomains", ())):
+                if not isinstance(finding, dict):
+                    continue
+                host = str(finding.get("host", "")).strip()
+                if host:
+                    observations.append(_tag("subdomain", host, "discovered", source, 0.85, (f"subfinder:{result_index}:{finding_index}",)))
         elif result.tool == "fingerprint" and result.ok:
             for field, entity in (("framework", "framework"), ("server", "server"), ("javascript", "runtime")):
                 value = str(payload.get(field, "")).strip()
