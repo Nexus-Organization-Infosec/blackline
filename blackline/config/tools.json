@@ -113,6 +113,14 @@
       "binary": "rpcinfo",
       "flags": ["-p"]
     },
+    "sslyze": {
+      "binary": "sslyze",
+      "flags": ["--quiet"]
+    },
+    "subfinder": {
+      "binary": "subfinder",
+      "flags": ["-oJ", "-cs", "-silent"]
+    },
     "yougotmapped": {
       "binary": "yougotmapped",
       "defaults": {
