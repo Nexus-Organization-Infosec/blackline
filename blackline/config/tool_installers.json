@@ -57,6 +57,20 @@
         ]
       }
     },
+    "katana": {
+      "binary": "katana",
+      "platforms": {
+        "Darwin": [
+          {"manager": "Go", "manager_binary": "go", "command": ["go", "install", "github.com/projectdiscovery/katana/cmd/katana@latest"]}
+        ],
+        "Linux": [
+          {"manager": "Go", "manager_binary": "go", "command": ["go", "install", "github.com/projectdiscovery/katana/cmd/katana@latest"]}
+        ],
+        "Windows": [
+          {"manager": "Go", "manager_binary": "go", "command": ["go", "install", "github.com/projectdiscovery/katana/cmd/katana@latest"]}
+        ]
+      }
+    },
     "rpcinfo": {
       "binary": "rpcinfo",
       "platforms": {
