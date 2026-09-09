@@ -116,5 +116,5 @@ class VectorReconTests(unittest.TestCase):
             run = run_expression("recon[target=10.0.0.174,strategy=balanced]")
 
         self.assertEqual(len(plans), 1)
-        self.assertEqual([step.tool for step in plans[0].steps], ["ipintel", "http", "httpx", "fingerprint", "whatweb", "tls", "rdap", "rpcinfo", "nmap"])
+        self.assertEqual([step.tool for step in plans[0].steps], ["ipintel", "http", "httpx", "fingerprint", "whatweb", "tls", "sslyze", "rdap", "rpcinfo", "nmap"])
         self.assertEqual(run.rounds, ())
