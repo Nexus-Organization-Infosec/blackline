@@ -17,6 +17,7 @@ from blackline.tools.dns.subfinder import enumerate_subdomains
 from blackline.tools.http.client import probe_http
 from blackline.tools.http.fingerprint import fingerprint_http
 from blackline.tools.http.httpx import probe_httpx
+from blackline.tools.http.katana import crawl_with_katana
 from blackline.tools.http.whatweb import fingerprint_with_whatweb
 from blackline.tools.network.nmap import NmapRequest, display_command, execute_nmap
 from blackline.tools.network.rpcinfo import query_rpcinfo
@@ -316,6 +317,37 @@ def execute_step(
         }
         return StepResult(step.tool, step.action, whatweb_result.ok, payload, whatweb_result.error)
 
+    if step.tool == "katana":
+        katana_result = crawl_with_katana(
+            str(step.params.get("target", "")),
+            host=str(step.params.get("host", "")),
+            scheme=str(step.params.get("scheme", "")),
+            path=str(step.params.get("path", "")),
+            port=str(step.params.get("port", "")),
+            timeout_seconds=timeout_seconds or 30.0,
+            executor=command_executor,
+        )
+        payload = {
+            "target": katana_result.target,
+            "crawl_url": katana_result.crawl_url,
+            "provider": "katana",
+            "findings": [
+                {
+                    "url": finding.url,
+                    "method": finding.method,
+                    "status_code": finding.status_code,
+                    "title": finding.title,
+                    "technologies": list(finding.technologies),
+                }
+                for finding in katana_result.findings
+            ],
+            "skipped": katana_result.skipped,
+            "negative_observation": katana_result.negative_observation,
+            "raw_output": katana_result.raw_output,
+            "elapsed_seconds": katana_result.elapsed_seconds,
+        }
+        return StepResult(step.tool, step.action, katana_result.ok, payload, katana_result.error)
+
     if step.tool == "rpcinfo":
         rpc_result = query_rpcinfo(
             str(step.params.get("host") or step.params.get("target") or ""),
@@ -539,6 +571,7 @@ def _step_timeout_seconds(tool: str) -> float | None:
         "http": "http_seconds",
         "httpx": "http_seconds",
         "whatweb": "http_fingerprint_seconds",
+        "katana": "katana_seconds",
         "rpcinfo": "nmap_seconds",
         "fingerprint": "http_fingerprint_seconds",
         "tls": "tls_seconds",
@@ -618,6 +651,8 @@ def _effective_execution_group(step: PlanStep) -> int:
     if step.tool == "ipintel":
         return 0 if target_type == "ip" else 1
     if step.tool == "fingerprint":
+        return 1
+    if step.tool in {"whatweb", "katana"}:
         return 1
     if step.tool == "rdap":
         return 2
