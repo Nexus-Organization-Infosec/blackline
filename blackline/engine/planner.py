@@ -42,7 +42,7 @@ def build_plan(context: ExecutionContext) -> ExecutionPlan:
             steps=tuple(
                 _plan_step_from_recon_step(step, context.params)
                 for step in pipeline.steps
-                if step.tool in {"dns", "ipintel", "http", "httpx", "fingerprint", "whatweb", "tls", "rdap", "rpcinfo", "nmap"}
+                if step.tool in {"dns", "subfinder", "ipintel", "http", "httpx", "fingerprint", "whatweb", "tls", "sslyze", "rdap", "rpcinfo", "nmap"}
             ),
             pipeline=pipeline,
         )
@@ -169,6 +169,14 @@ def _plan_step_from_recon_step(step: ReconStep, params: dict[str, str]) -> PlanS
             execution_group=_execution_group(step),
         )
 
+    if step.tool == "subfinder":
+        return PlanStep(
+            tool="subfinder",
+            action=step.name,
+            params={key: str(value) for key, value in step.inputs.items()},
+            execution_group=_execution_group(step),
+        )
+
     if step.tool == "ipintel":
         return PlanStep(
             tool="ipintel",
@@ -233,6 +241,14 @@ def _plan_step_from_recon_step(step: ReconStep, params: dict[str, str]) -> PlanS
             execution_group=_execution_group(step),
         )
 
+    if step.tool == "sslyze":
+        return PlanStep(
+            tool="sslyze",
+            action=step.name,
+            params={key: str(value) for key, value in step.inputs.items()},
+            execution_group=_execution_group(step),
+        )
+
     scan_params = nmap_policy_params(params)
     return PlanStep(
         tool=step.tool,
@@ -259,8 +275,10 @@ def _execution_group(step: ReconStep) -> int:
         return 1 if target_type == "ip" else 2
     if step.tool == "ipintel":
         return 0 if target_type == "ip" else 1
-    if step.tool in {"dns", "http", "httpx", "tls"}:
+    if step.tool in {"dns", "subfinder", "http", "httpx", "tls"}:
         return 0
+    if step.tool == "sslyze":
+        return 1
     if step.tool == "rpcinfo":
         return 1
     if step.tool in {"fingerprint", "whatweb"}:
