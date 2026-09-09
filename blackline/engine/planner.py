@@ -42,7 +42,7 @@ def build_plan(context: ExecutionContext) -> ExecutionPlan:
             steps=tuple(
                 _plan_step_from_recon_step(step, context.params)
                 for step in pipeline.steps
-                if step.tool in {"dns", "subfinder", "ipintel", "http", "httpx", "fingerprint", "whatweb", "tls", "sslyze", "rdap", "rpcinfo", "nmap"}
+                if step.tool in {"dns", "subfinder", "ipintel", "http", "httpx", "fingerprint", "whatweb", "katana", "tls", "sslyze", "rdap", "rpcinfo", "nmap"}
             ),
             pipeline=pipeline,
         )
@@ -209,6 +209,14 @@ def _plan_step_from_recon_step(step: ReconStep, params: dict[str, str]) -> PlanS
             execution_group=_execution_group(step),
         )
 
+    if step.tool == "katana":
+        return PlanStep(
+            tool="katana",
+            action=step.name,
+            params={key: str(value) for key, value in step.inputs.items()},
+            execution_group=_execution_group(step),
+        )
+
     if step.tool == "fingerprint":
         return PlanStep(
             tool="fingerprint",
@@ -281,7 +289,7 @@ def _execution_group(step: ReconStep) -> int:
         return 1
     if step.tool == "rpcinfo":
         return 1
-    if step.tool in {"fingerprint", "whatweb"}:
+    if step.tool in {"fingerprint", "whatweb", "katana"}:
         return 1
     if step.tool == "rdap":
         return 2
