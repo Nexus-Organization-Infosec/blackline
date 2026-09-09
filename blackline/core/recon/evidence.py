@@ -44,6 +44,7 @@ def build_evidence_graph(target: str, payloads: dict[str, dict]) -> EvidenceGrap
     fingerprint = payloads.get("fingerprint", {})
     httpx = payloads.get("httpx", {})
     whatweb = payloads.get("whatweb", {})
+    katana = payloads.get("katana", {})
     rpcinfo = payloads.get("rpcinfo", {})
     sslyze = payloads.get("sslyze", {})
     tls = payloads.get("tls", {})
@@ -135,6 +136,22 @@ def build_evidence_graph(target: str, payloads: dict[str, dict]) -> EvidenceGrap
                     value = str(technology).strip()
                     if value and value.lower() != "unknown":
                         _add_claim(claims, target, "uses_technology", value, whatweb_source)
+
+    katana_source = _sources(katana, fallback="katana")
+    katana_findings = katana.get("findings", []) if isinstance(katana, dict) else []
+    if isinstance(katana_findings, list):
+        for finding in katana_findings:
+            if not isinstance(finding, dict):
+                continue
+            endpoint = str(finding.get("url", "")).strip()
+            if endpoint:
+                _add_claim(claims, target, "discovers_endpoint", endpoint, katana_source)
+            technologies = finding.get("technologies", [])
+            if isinstance(technologies, list):
+                for technology in technologies:
+                    value = str(technology).strip()
+                    if value and value.lower() != "unknown":
+                        _add_claim(claims, target, "uses_technology", value, katana_source)
 
     rpcinfo_source = _sources(rpcinfo, fallback="rpcinfo")
     rpc_records = rpcinfo.get("registrations", []) if isinstance(rpcinfo, dict) else []
