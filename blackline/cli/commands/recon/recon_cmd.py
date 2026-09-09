@@ -233,12 +233,14 @@ def _progress_label(step: PlanStep) -> str:
     """Return the human-readable label used by the recon progress view."""
     labels = {
         "dns": "DNS lookup",
+        "subfinder": "passive subdomain discovery",
         "ipintel": "network intelligence",
         "http": "web probe",
         "httpx": "httpx service confirmation",
         "fingerprint": "web fingerprint",
         "whatweb": "WhatWeb fingerprint",
         "rpcinfo": "RPC program registry",
+        "sslyze": "TLS configuration analysis",
         "tls": "TLS certificate inspection",
         "rdap": "RDAP registration and ownership",
         "nmap": "service and system scan",
@@ -346,11 +348,13 @@ def render_recon_report(payloads: dict[str, dict], *, use_color: bool | None = N
     """Render normalized findings while raw adapter output remains in the job."""
     ipintel = payloads.get("ipintel", {})
     dns = payloads.get("dns", {})
+    subfinder = payloads.get("subfinder", {})
     http = payloads.get("http", {})
     httpx = payloads.get("httpx", {})
     fingerprint = payloads.get("fingerprint", {})
     whatweb = payloads.get("whatweb", {})
     rpcinfo = payloads.get("rpcinfo", {})
+    sslyze = payloads.get("sslyze", {})
     tls = payloads.get("tls", {})
     rdap = payloads.get("rdap", {})
     correlation = payloads.get("correlation", {})
@@ -360,6 +364,8 @@ def render_recon_report(payloads: dict[str, dict], *, use_color: bool | None = N
         _render_network_section(ipintel, use_color=use_color)
     if dns:
         _render_dns_report(dns, use_color=use_color)
+    if subfinder:
+        _render_subfinder_section(subfinder, use_color=use_color)
     if http:
         _render_web_section(http, use_color=use_color)
     if httpx:
@@ -370,6 +376,8 @@ def render_recon_report(payloads: dict[str, dict], *, use_color: bool | None = N
         _render_whatweb_section(whatweb, use_color=use_color)
     if rpcinfo:
         _render_rpcinfo_section(rpcinfo, use_color=use_color)
+    if sslyze:
+        _render_sslyze_section(sslyze, use_color=use_color)
     if tls:
         _render_tls_section(tls, use_color=use_color)
     if rdap:
@@ -405,6 +413,30 @@ def _render_dns_report(payload: dict, *, use_color: bool | None = None) -> None:
             values = records.get(record_type, [])
             if isinstance(values, list) and values:
                 _render_field(record_type.lower(), ", ".join(str(value) for value in values), use_color=use_color)
+    write_line(use_color=use_color)
+
+
+def _render_subfinder_section(payload: dict, *, use_color: bool | None = None) -> None:
+    """Render passive subdomain discoveries without exposing JSONL output."""
+    _render_section_header("subdomains", _provider_names(payload, fallback="subfinder"), use_color=use_color)
+    if payload.get("skipped"):
+        _render_field("status", "skipped (Subfinder unavailable; run install subfinder)", use_color=use_color)
+        write_line(use_color=use_color)
+        return
+    findings = payload.get("subdomains", [])
+    if not isinstance(findings, list) or not findings:
+        _render_field("status", "no passive subdomains discovered", use_color=use_color)
+        write_line(use_color=use_color)
+        return
+    for finding in findings:
+        if not isinstance(finding, dict):
+            continue
+        host = str(finding.get("host", "")).strip()
+        if not host:
+            continue
+        sources = finding.get("sources", [])
+        annotation = ", ".join(str(source) for source in sources) if isinstance(sources, list) else ""
+        _render_field(host, annotation or "discovered", use_color=use_color)
     write_line(use_color=use_color)
 
 
@@ -521,6 +553,35 @@ def _render_rpcinfo_section(payload: dict, *, use_color: bool | None = None) -> 
     write_line(use_color=use_color)
 
 
+def _render_sslyze_section(payload: dict, *, use_color: bool | None = None) -> None:
+    """Render normalized TLS configuration coverage and notable findings."""
+    _render_section_header("tls configuration", _provider_names(payload, fallback="sslyze"), use_color=use_color)
+    if payload.get("skipped"):
+        _render_field("status", "skipped (SSLyze unavailable; run install sslyze)", use_color=use_color)
+        write_line(use_color=use_color)
+        return
+    scans = payload.get("scans", [])
+    if not isinstance(scans, list) or not scans:
+        _render_field("status", "no TLS configuration confirmed", use_color=use_color)
+        write_line(use_color=use_color)
+        return
+    for scan in scans:
+        if not isinstance(scan, dict):
+            continue
+        endpoint = f"{scan.get('host', 'unknown')}:{scan.get('port') or '443'}"
+        protocols = scan.get("protocols", [])
+        ciphers = scan.get("ciphers", [])
+        findings = scan.get("findings", [])
+        _render_field("endpoint", endpoint, use_color=use_color)
+        if isinstance(protocols, list) and protocols:
+            _render_field("protocols", ", ".join(str(item) for item in protocols), use_color=use_color)
+        if isinstance(ciphers, list) and ciphers:
+            _render_field("ciphers", ", ".join(str(item) for item in ciphers[:6]), use_color=use_color)
+        if isinstance(findings, list) and findings:
+            _render_field("findings", ", ".join(str(item) for item in findings), use_color=use_color)
+    write_line(use_color=use_color)
+
+
 def _render_tls_section(payload: dict, *, use_color: bool | None = None) -> None:
     """Render TLS facts without exposing the raw certificate parser output."""
     _render_section_header("tls", _tls_provider_names(payload), use_color=use_color)
@@ -618,12 +679,15 @@ def _render_correlation_section(payload: dict, *, use_color: bool | None = None)
     _render_section_header("correlation", sources, use_color=use_color)
     _render_field("target", str(payload.get("target") or "unknown"), use_color=use_color)
     _render_correlation_values("addresses", normalized, "resolves_to", use_color=use_color)
+    _render_correlation_values("subdomains", normalized, "discovers_subdomain", use_color=use_color)
     _render_correlation_values("ownership", normalized, "owned_by", use_color=use_color)
     _render_correlation_values("asn", normalized, "announced_by", use_color=use_color)
     _render_correlation_values("web edge", normalized, "served_by", use_color=use_color)
     _render_correlation_values("framework", normalized, "uses_framework", use_color=use_color)
     _render_correlation_values("technology", normalized, "uses_technology", use_color=use_color)
     _render_correlation_values("rpc services", normalized, "exposes_rpc_service", use_color=use_color)
+    _render_correlation_values("tls protocols", normalized, "supports_tls_protocol", use_color=use_color)
+    _render_correlation_values("tls findings", normalized, "has_tls_finding", use_color=use_color)
     _render_correlation_values("tls names", normalized, "presents_tls_name", use_color=use_color)
     write_line(use_color=use_color)
 
