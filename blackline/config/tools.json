@@ -10,6 +10,7 @@
           "ipintel_seconds": 30,
           "http_seconds": 10,
           "http_fingerprint_seconds": 10,
+          "katana_seconds": 30,
           "tls_seconds": 10,
           "rdap_seconds": 10,
           "port_scan_seconds": 0
@@ -108,6 +109,10 @@
     "whatweb": {
       "binary": "whatweb",
       "flags": ["--aggression=1", "--no-errors", "--quiet", "--color=never"]
+    },
+    "katana": {
+      "binary": "katana",
+      "flags": ["-jsonl", "-silent", "-d", "2", "-rl", "10", "-iqp", "-td", "-or", "-ob"]
     },
     "rpcinfo": {
       "binary": "rpcinfo",
