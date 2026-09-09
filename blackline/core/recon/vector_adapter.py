@@ -148,6 +148,17 @@ def observations_from_results(results: Iterable[StepResult], *, fallback_host: s
                     value = str(technology).strip().lower()
                     if value:
                         observations.append(_tag("technology", value, "found", source, 0.85, (f"whatweb:{result_index}:{finding_index}",)))
+        elif result.tool == "katana":
+            for finding_index, finding in enumerate(payload.get("findings", ())):
+                if not isinstance(finding, dict):
+                    continue
+                endpoint = str(finding.get("url", "")).strip()
+                if endpoint:
+                    observations.append(_tag("web_endpoint", endpoint, "discovered", source, 0.9, (f"katana:{result_index}:{finding_index}",)))
+                for technology in finding.get("technologies", ()):
+                    value = str(technology).strip().lower()
+                    if value:
+                        observations.append(_tag("technology", value, "found", source, 0.8, (f"katana:{result_index}:{finding_index}",)))
         elif result.tool == "rpcinfo":
             for registration_index, registration in enumerate(payload.get("registrations", ())):
                 if not isinstance(registration, dict):
