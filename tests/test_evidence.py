@@ -36,6 +36,10 @@ class EvidenceGraphTests(unittest.TestCase):
                 "provider": "httpx",
                 "findings": [{"webserver": "cloudflare", "technologies": ["Next.js", "React"]}],
             },
+            "katana": {
+                "provider": "katana",
+                "findings": [{"url": "https://owasp.org/projects", "technologies": ["Next.js"]}],
+            },
             "tls": {
                 "provider": "python ssl",
                 "certificate_parser": "openssl",
@@ -52,6 +56,7 @@ class EvidenceGraphTests(unittest.TestCase):
         self.assertEqual(graph.values("uses_technology"), ("Next.js", "React"))
         self.assertEqual(graph.values("presents_tls_name"), ("owasp.org", "www.owasp.org"))
         self.assertEqual(graph.values("discovers_subdomain"), ("www.owasp.org",))
+        self.assertEqual(graph.values("discovers_endpoint"), ("https://owasp.org/projects",))
 
     def test_correlation_report_renders_cross_tool_joins(self):
         graph = build_evidence_graph("owasp.org", self.payloads)
@@ -60,9 +65,10 @@ class EvidenceGraphTests(unittest.TestCase):
             render_recon_report({"correlation": graph.to_dict()}, use_color=False)
 
         text = output.getvalue()
-        self.assertIn("correlation  (sources: dnspython, rdap.org, yougotmapped, crtsh, urllib, httpx, python ssl, openssl)", text)
+        self.assertIn("correlation  (sources: dnspython, rdap.org, yougotmapped, crtsh, urllib, httpx, katana, python ssl, openssl)", text)
         self.assertIn("addresses  : 172.66.157.115", text)
         self.assertIn("subdomains : www.owasp.org", text)
+        self.assertIn("endpoints  : https://owasp.org/projects", text)
         self.assertIn("ownership  : Cloudflare, Inc.", text)
         self.assertIn("web edge   : cloudflare", text)
         self.assertIn("technology : Next.js, React", text)
