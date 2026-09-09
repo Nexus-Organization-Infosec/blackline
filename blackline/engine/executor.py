@@ -13,6 +13,7 @@ from blackline.engine.planner import ExecutionPlan, PlanStep
 from blackline.tools.intel.yougotmapped import resolve_ipintel
 from blackline.tools.intel.rdap import resolve_rdap
 from blackline.tools.dns.resolver import resolve_dns
+from blackline.tools.dns.subfinder import enumerate_subdomains
 from blackline.tools.http.client import probe_http
 from blackline.tools.http.fingerprint import fingerprint_http
 from blackline.tools.http.httpx import probe_httpx
@@ -20,6 +21,7 @@ from blackline.tools.http.whatweb import fingerprint_with_whatweb
 from blackline.tools.network.nmap import NmapRequest, display_command, execute_nmap
 from blackline.tools.network.rpcinfo import query_rpcinfo
 from blackline.tools.tls.inspector import inspect_tls
+from blackline.tools.tls.sslyze import inspect_tls_configuration
 from blackline.utils.exec import CommandResult
 
 
@@ -146,6 +148,33 @@ def execute_step(
             ok=lookup.ok,
             payload=payload,
             error=lookup.error,
+        )
+
+    if step.tool == "subfinder":
+        result = enumerate_subdomains(
+            step.params.get("domain", "") or step.params.get("target", ""),
+            executor=command_executor,
+            timeout_seconds=timeout_seconds,
+        )
+        payload = {
+            "target": step.params.get("target", ""),
+            "domain": result.domain,
+            "subdomains": [
+                {"host": finding.host, "sources": list(finding.sources)}
+                for finding in result.subdomains
+            ],
+            "provider": "subfinder",
+            "skipped": result.skipped,
+            "negative_observation": result.negative_observation,
+            "raw_output": result.raw_output,
+            "elapsed_seconds": result.elapsed_seconds,
+        }
+        return StepResult(
+            tool=step.tool,
+            action=step.action,
+            ok=result.ok,
+            payload=payload,
+            error=result.error,
         )
 
     if step.tool == "ipintel":
@@ -306,6 +335,24 @@ def execute_step(
             "elapsed_seconds": rpc_result.elapsed_seconds,
         }
         return StepResult(step.tool, step.action, rpc_result.ok, payload, rpc_result.error)
+
+    if step.tool == "sslyze":
+        port = int(str(step.params.get("port") or "443"))
+        sslyze_result = inspect_tls_configuration(
+            str(step.params.get("host", "")), port=port,
+            timeout_seconds=timeout_seconds or 45.0, executor=command_executor,
+        )
+        payload = {
+            "host": sslyze_result.host, "port": sslyze_result.port, "provider": "sslyze",
+            "scans": [
+                {"host": scan.host, "port": scan.port, "protocols": list(scan.protocols),
+                 "ciphers": list(scan.ciphers), "findings": list(scan.findings)}
+                for scan in sslyze_result.scans
+            ],
+            "skipped": sslyze_result.skipped, "negative_observation": sslyze_result.negative_observation,
+            "raw_output": sslyze_result.raw_output, "elapsed_seconds": sslyze_result.elapsed_seconds,
+        }
+        return StepResult(step.tool, step.action, sslyze_result.ok, payload, sslyze_result.error)
 
     if step.tool == "tls":
         tls_result = inspect_tls(
@@ -487,6 +534,7 @@ def _step_timeout_seconds(tool: str) -> float | None:
 
     key_map = {
         "dns": "dns_seconds",
+        "subfinder": "dns_seconds",
         "ipintel": "ipintel_seconds",
         "http": "http_seconds",
         "httpx": "http_seconds",
@@ -494,6 +542,7 @@ def _step_timeout_seconds(tool: str) -> float | None:
         "rpcinfo": "nmap_seconds",
         "fingerprint": "http_fingerprint_seconds",
         "tls": "tls_seconds",
+        "sslyze": "tls_seconds",
         "rdap": "rdap_seconds",
         "nmap": "port_scan_seconds",
     }
