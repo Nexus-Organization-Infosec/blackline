@@ -64,6 +64,36 @@
           {"manager": "APT", "manager_binary": "apt-get", "command": ["apt-get", "install", "-y", "rpcbind"]}
         ]
       }
+    },
+    "sslyze": {
+      "binary": "sslyze",
+      "platforms": {
+        "Darwin": [
+          {"manager": "Homebrew", "manager_binary": "brew", "command": ["brew", "install", "sslyze"]},
+          {"manager": "pipx", "manager_binary": "pipx", "command": ["pipx", "install", "sslyze"]}
+        ],
+        "Linux": [
+          {"manager": "pipx", "manager_binary": "pipx", "command": ["pipx", "install", "sslyze"]}
+        ],
+        "Windows": [
+          {"manager": "pipx", "manager_binary": "pipx", "command": ["pipx", "install", "sslyze"]}
+        ]
+      }
+    },
+    "subfinder": {
+      "binary": "subfinder",
+      "platforms": {
+        "Darwin": [
+          {"manager": "Homebrew", "manager_binary": "brew", "command": ["brew", "install", "subfinder"]},
+          {"manager": "Go", "manager_binary": "go", "command": ["go", "install", "github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest"]}
+        ],
+        "Linux": [
+          {"manager": "Go", "manager_binary": "go", "command": ["go", "install", "github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest"]}
+        ],
+        "Windows": [
+          {"manager": "Go", "manager_binary": "go", "command": ["go", "install", "github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest"]}
+        ]
+      }
     }
   }
 }
