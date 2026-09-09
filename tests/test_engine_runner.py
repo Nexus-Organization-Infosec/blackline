@@ -193,8 +193,8 @@ class EngineRunnerTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(len(plan.steps), 10)
-        self.assertEqual([step.tool for step in plan.steps], ["http", "httpx", "fingerprint", "whatweb", "dns", "ipintel", "tls", "sslyze", "rdap", "nmap"])
+        self.assertEqual(len(plan.steps), 11)
+        self.assertEqual([step.tool for step in plan.steps], ["http", "httpx", "fingerprint", "whatweb", "katana", "dns", "ipintel", "tls", "sslyze", "rdap", "nmap"])
         self.assertEqual(plan.steps[0].action, "http_probe")
         self.assertEqual(plan.steps[0].params["scheme"], "https")
         self.assertEqual(plan.steps[0].params["path"], "/login")
@@ -202,14 +202,14 @@ class EngineRunnerTests(unittest.TestCase):
         self.assertEqual(plan.steps[1].params["host"], "example.com")
         self.assertEqual(plan.steps[2].params["host"], "example.com")
         self.assertEqual(plan.steps[3].params["host"], "example.com")
-        self.assertEqual(plan.steps[6].params["server_name"], "example.com")
-        self.assertEqual(plan.steps[8].params["host"], "example.com")
-        self.assertEqual(plan.steps[9].params["target"], "example.com")
-        self.assertEqual([step.execution_group for step in plan.steps], [0, 0, 1, 1, 0, 1, 0, 1, 2, 2])
+        self.assertEqual(plan.steps[7].params["server_name"], "example.com")
+        self.assertEqual(plan.steps[9].params["host"], "example.com")
+        self.assertEqual(plan.steps[10].params["target"], "example.com")
+        self.assertEqual([step.execution_group for step in plan.steps], [0, 0, 1, 1, 1, 0, 1, 0, 1, 2, 2])
         self.assertIsNotNone(plan.pipeline)
         self.assertEqual(
             [step.name for step in plan.pipeline.steps],
-            ["http_probe", "httpx_probe", "web_fingerprint", "whatweb_fingerprint", "dns", "ipintel", "tls_inspection", "sslyze", "rdap", "port_scan"],
+            ["http_probe", "httpx_probe", "web_fingerprint", "whatweb_fingerprint", "web_crawl", "dns", "ipintel", "tls_inspection", "sslyze", "rdap", "port_scan"],
         )
 
     def test_build_plan_for_domain_includes_dns_then_nmap(self):
@@ -222,7 +222,7 @@ class EngineRunnerTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual([step.tool for step in plan.steps], ["dns", "subfinder", "ipintel", "http", "httpx", "fingerprint", "whatweb", "tls", "sslyze", "rdap", "rpcinfo", "nmap"])
+        self.assertEqual([step.tool for step in plan.steps], ["dns", "subfinder", "ipintel", "http", "httpx", "fingerprint", "whatweb", "katana", "tls", "sslyze", "rdap", "rpcinfo", "nmap"])
         self.assertEqual(plan.steps[0].action, "dns")
         self.assertEqual(plan.steps[0].params["host"], "example.com")
         self.assertEqual(plan.steps[1].action, "subfinder")
@@ -230,11 +230,12 @@ class EngineRunnerTests(unittest.TestCase):
         self.assertEqual(plan.steps[3].action, "http_probe")
         self.assertEqual(plan.steps[4].action, "httpx_probe")
         self.assertEqual(plan.steps[5].action, "web_fingerprint")
-        self.assertEqual(plan.steps[7].action, "tls_inspection")
-        self.assertEqual(plan.steps[9].action, "rdap")
-        self.assertEqual(plan.steps[11].action, "port_scan")
-        self.assertEqual(plan.steps[11].params["target"], "example.com")
-        self.assertEqual([step.execution_group for step in plan.steps], [0, 0, 1, 0, 0, 1, 1, 0, 1, 2, 1, 2])
+        self.assertEqual(plan.steps[7].action, "web_crawl")
+        self.assertEqual(plan.steps[8].action, "tls_inspection")
+        self.assertEqual(plan.steps[10].action, "rdap")
+        self.assertEqual(plan.steps[12].action, "port_scan")
+        self.assertEqual(plan.steps[12].params["target"], "example.com")
+        self.assertEqual([step.execution_group for step in plan.steps], [0, 0, 1, 0, 0, 1, 1, 1, 0, 1, 2, 1, 2])
 
     def test_build_plan_passes_through_scan_variety(self):
         plan = build_plan(
@@ -482,7 +483,7 @@ class EngineRunnerTests(unittest.TestCase):
             execute_plan.__globals__["probe_http"] = original_probe_http
             execute_plan.__globals__["resolve_ipintel"] = original_resolve_ipintel
 
-        self.assertEqual([result.tool for result in results], ["dns", "subfinder", "ipintel", "http", "httpx", "fingerprint", "whatweb", "tls", "sslyze", "rdap", "rpcinfo", "nmap"])
+        self.assertEqual([result.tool for result in results], ["dns", "subfinder", "ipintel", "http", "httpx", "fingerprint", "whatweb", "katana", "tls", "sslyze", "rdap", "rpcinfo", "nmap"])
         self.assertEqual(results[2].payload["lookup_ip"], "93.184.216.34")
 
     def test_run_expression_tracks_session_runs(self):
