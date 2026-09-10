@@ -241,6 +241,7 @@ def _progress_label(step: PlanStep) -> str:
         "whatweb": "WhatWeb fingerprint",
         "katana": "web crawl",
         "rpcinfo": "RPC program registry",
+        "naabu": "fast port discovery",
         "sslyze": "TLS configuration analysis",
         "tls": "TLS certificate inspection",
         "rdap": "RDAP registration and ownership",
@@ -356,6 +357,7 @@ def render_recon_report(payloads: dict[str, dict], *, use_color: bool | None = N
     whatweb = payloads.get("whatweb", {})
     katana = payloads.get("katana", {})
     rpcinfo = payloads.get("rpcinfo", {})
+    naabu = payloads.get("naabu", {})
     sslyze = payloads.get("sslyze", {})
     tls = payloads.get("tls", {})
     rdap = payloads.get("rdap", {})
@@ -380,6 +382,8 @@ def render_recon_report(payloads: dict[str, dict], *, use_color: bool | None = N
         _render_katana_section(katana, use_color=use_color)
     if rpcinfo:
         _render_rpcinfo_section(rpcinfo, use_color=use_color)
+    if naabu:
+        _render_naabu_section(naabu, use_color=use_color)
     if sslyze:
         _render_sslyze_section(sslyze, use_color=use_color)
     if tls:
@@ -589,6 +593,26 @@ def _render_rpcinfo_section(payload: dict, *, use_color: bool | None = None) -> 
     write_line(use_color=use_color)
 
 
+def _render_naabu_section(payload: dict, *, use_color: bool | None = None) -> None:
+    """Render Naabu's fast port inventory before detailed Nmap evidence."""
+    _render_section_header("port discovery", _provider_names(payload, fallback="naabu"), use_color=use_color)
+    if payload.get("skipped"):
+        _render_field("status", "skipped (Naabu unavailable; Nmap used its normal scan)", use_color=use_color)
+        write_line(use_color=use_color)
+        return
+    ports = payload.get("ports", [])
+    if not isinstance(ports, list) or not ports:
+        _render_field("status", "no open TCP ports discovered", use_color=use_color)
+        write_line(use_color=use_color)
+        return
+    values = []
+    for port in ports:
+        if isinstance(port, dict):
+            values.append(f"{port.get('port')}/{port.get('protocol', 'tcp')}")
+    _render_field("open", ", ".join(values) or "unknown", use_color=use_color)
+    write_line(use_color=use_color)
+
+
 def _render_sslyze_section(payload: dict, *, use_color: bool | None = None) -> None:
     """Render normalized TLS configuration coverage and notable findings."""
     _render_section_header("tls configuration", _provider_names(payload, fallback="sslyze"), use_color=use_color)
@@ -723,6 +747,7 @@ def _render_correlation_section(payload: dict, *, use_color: bool | None = None)
     _render_correlation_values("framework", normalized, "uses_framework", use_color=use_color)
     _render_correlation_values("technology", normalized, "uses_technology", use_color=use_color)
     _render_correlation_values("rpc services", normalized, "exposes_rpc_service", use_color=use_color)
+    _render_correlation_values("ports", normalized, "exposes_port", use_color=use_color)
     _render_correlation_values("tls protocols", normalized, "supports_tls_protocol", use_color=use_color)
     _render_correlation_values("tls findings", normalized, "has_tls_finding", use_color=use_color)
     _render_correlation_values("tls names", normalized, "presents_tls_name", use_color=use_color)
@@ -741,6 +766,10 @@ def _render_correlation_values(label: str, claims: list[dict], predicate: str, *
 
 def _render_services_section(payload: dict, *, use_color: bool | None = None) -> None:
     _render_section_header("services", _provider_names(payload, fallback="nmap"), use_color=use_color)
+    if payload.get("skipped"):
+        _render_field("status", str(payload.get("skip_reason") or "skipped"), use_color=use_color)
+        write_line(use_color=use_color)
+        return
     ports = payload.get("ports", [])
     interesting = [port for port in ports if isinstance(port, dict) and str(port.get("state", "")).lower() in {"open", "filtered"}] if isinstance(ports, list) else []
     if not interesting:
