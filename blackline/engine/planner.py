@@ -42,7 +42,7 @@ def build_plan(context: ExecutionContext) -> ExecutionPlan:
             steps=tuple(
                 _plan_step_from_recon_step(step, context.params)
                 for step in pipeline.steps
-                if step.tool in {"dns", "subfinder", "ipintel", "http", "httpx", "fingerprint", "whatweb", "katana", "tls", "sslyze", "rdap", "rpcinfo", "nmap"}
+                if step.tool in {"dns", "subfinder", "ipintel", "http", "httpx", "fingerprint", "whatweb", "katana", "tls", "sslyze", "rdap", "rpcinfo", "naabu", "nmap"}
             ),
             pipeline=pipeline,
         )
@@ -55,7 +55,7 @@ def build_essential_recon_plan(context: ExecutionContext) -> ExecutionPlan:
     if context.module != "recon":
         return build_plan(context)
     pipeline = build_recon_pipeline(context.params.get("target", ""), params=context.params)
-    essential_tools = {"dns", "nmap"}
+    essential_tools = {"dns", "naabu", "nmap"}
     if pipeline.target.target_type == "url":
         essential_tools.add("http")
     steps = tuple(
@@ -257,6 +257,20 @@ def _plan_step_from_recon_step(step: ReconStep, params: dict[str, str]) -> PlanS
             execution_group=_execution_group(step),
         )
 
+    if step.tool == "naabu":
+        scan_params = nmap_policy_params(params)
+        return PlanStep(
+            tool="naabu",
+            action=step.name,
+            params={
+                "target": str(step.inputs.get("target", "")),
+                "target_type": str(step.inputs.get("target_type", "")),
+                "ports": str(step.inputs.get("ports", "")) or scan_params["ports"],
+                "top_ports": str(step.inputs.get("top_ports", "")) or scan_params["top_ports"],
+            },
+            execution_group=_execution_group(step),
+        )
+
     scan_params = nmap_policy_params(params)
     return PlanStep(
         tool=step.tool,
@@ -284,6 +298,8 @@ def _execution_group(step: ReconStep) -> int:
     if step.tool == "ipintel":
         return 0 if target_type == "ip" else 1
     if step.tool in {"dns", "subfinder", "http", "httpx", "tls"}:
+        return 0
+    if step.tool == "naabu":
         return 0
     if step.tool == "sslyze":
         return 1
