@@ -79,6 +79,21 @@
         ]
       }
     },
+    "naabu": {
+      "binary": "naabu",
+      "platforms": {
+        "Darwin": [
+          {"manager": "Homebrew", "manager_binary": "brew", "command": ["brew", "install", "naabu"]},
+          {"manager": "Go", "manager_binary": "go", "command": ["go", "install", "github.com/projectdiscovery/naabu/v2/cmd/naabu@latest"]}
+        ],
+        "Linux": [
+          {"manager": "Go", "manager_binary": "go", "command": ["go", "install", "github.com/projectdiscovery/naabu/v2/cmd/naabu@latest"]}
+        ],
+        "Windows": [
+          {"manager": "Go", "manager_binary": "go", "command": ["go", "install", "github.com/projectdiscovery/naabu/v2/cmd/naabu@latest"]}
+        ]
+      }
+    },
     "sslyze": {
       "binary": "sslyze",
       "platforms": {
