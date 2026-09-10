@@ -20,6 +20,7 @@ from blackline.tools.http.httpx import probe_httpx
 from blackline.tools.http.katana import crawl_with_katana
 from blackline.tools.http.whatweb import fingerprint_with_whatweb
 from blackline.tools.network.nmap import NmapRequest, display_command, execute_nmap
+from blackline.tools.network.naabu import scan_ports_with_naabu
 from blackline.tools.network.rpcinfo import query_rpcinfo
 from blackline.tools.tls.inspector import inspect_tls
 from blackline.tools.tls.sslyze import inspect_tls_configuration
@@ -473,12 +474,52 @@ def execute_step(
         }
         return StepResult(step.tool, step.action, rdap.ok, payload, rdap.error)
 
+    if step.tool == "naabu":
+        naabu_result = scan_ports_with_naabu(
+            str(step.params.get("target", "")),
+            ports=str(step.params.get("ports", "")),
+            top_ports=str(step.params.get("top_ports", "")),
+            timeout_seconds=timeout_seconds or 60.0,
+            executor=command_executor,
+        )
+        payload = {
+            "target": naabu_result.target,
+            "provider": "naabu",
+            "ports": [
+                {"host": item.host, "port": item.port, "protocol": item.protocol, "state": "open"}
+                for item in naabu_result.ports
+            ],
+            "skipped": naabu_result.skipped,
+            "negative_observation": naabu_result.negative_observation,
+            "raw_output": naabu_result.raw_output,
+            "elapsed_seconds": naabu_result.elapsed_seconds,
+        }
+        return StepResult(step.tool, step.action, naabu_result.ok, payload, naabu_result.error)
+
     if step.tool == "nmap":
+        runtime_state = runtime_state or {}
+        naabu_ports = runtime_state.get("naabu_open_ports")
+        if runtime_state.get("naabu_completed") and isinstance(naabu_ports, list) and not naabu_ports:
+            return StepResult(
+                step.tool,
+                step.action,
+                ok=False,
+                payload={
+                    "target": step.params.get("target", ""),
+                    "ports": [],
+                    "provider": "nmap",
+                    "skipped": True,
+                    "skip_reason": "Naabu found no open TCP ports",
+                    "negative_observation": True,
+                },
+                error="Naabu found no open TCP ports",
+            )
+        discovered_ports = _nmap_ports_from_naabu(naabu_ports)
         execution = _execute_nmap_step(
             NmapRequest(
                 target=step.params.get("target", ""),
-                ports=step.params.get("ports", ""),
-                top_ports=step.params.get("top_ports", ""),
+                ports=discovered_ports or step.params.get("ports", ""),
+                top_ports="" if discovered_ports else step.params.get("top_ports", ""),
                 profile=step.params.get("profile", "default"),
                 timing=step.params.get("timing", ""),
                 service_detection=_to_bool(step.params.get("service_detection", "")),
@@ -552,6 +593,28 @@ def _update_runtime_state(runtime_state: dict[str, object], result: StepResult) 
         resolved_ips = result.payload.get("resolved_ips", [])
         if isinstance(resolved_ips, list):
             runtime_state["resolved_ips"] = list(resolved_ips)
+    if result.tool == "naabu":
+        ports = result.payload.get("ports", [])
+        if isinstance(ports, list):
+            runtime_state["naabu_open_ports"] = list(ports)
+            runtime_state["naabu_completed"] = result.ok
+
+
+def _nmap_ports_from_naabu(value: object) -> str:
+    """Return a stable Nmap port expression from successful Naabu discovery."""
+    if not isinstance(value, list):
+        return ""
+    ports: set[int] = set()
+    for item in value:
+        if not isinstance(item, dict) or str(item.get("protocol", "tcp")).lower() != "tcp":
+            continue
+        try:
+            port = int(item.get("port", 0))
+        except (TypeError, ValueError):
+            continue
+        if 1 <= port <= 65535:
+            ports.add(port)
+    return ",".join(str(port) for port in sorted(ports))
 
 
 def _step_timeout_seconds(tool: str) -> float | None:
