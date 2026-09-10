@@ -91,7 +91,7 @@ class VectorReconTests(unittest.TestCase):
 
         def fake_execute(plan, **_kwargs):
             calls.append([step.tool for step in plan.steps])
-            if calls[-1] == ["nmap"]:
+            if calls[-1] == ["naabu", "nmap"]:
                 return (self.discovery,)
             return tuple(
                 StepResult(tool=step.tool, action=step.action, ok=True, payload={"provider": step.tool, "findings": []})
@@ -105,7 +105,7 @@ class VectorReconTests(unittest.TestCase):
                 vector_callback=rounds.append,
             )
 
-        self.assertEqual(calls, [["nmap"], ["httpx", "fingerprint"]])
+        self.assertEqual(calls, [["naabu", "nmap"], ["httpx", "fingerprint"]])
         self.assertEqual([round_.number for round_ in rounds], [1, 2])
         self.assertEqual(len(run.rounds), 2)
         self.assertEqual([result.tool for result in run.results], ["nmap", "httpx", "fingerprint"])
@@ -116,5 +116,5 @@ class VectorReconTests(unittest.TestCase):
             run = run_expression("recon[target=10.0.0.174,strategy=balanced]")
 
         self.assertEqual(len(plans), 1)
-        self.assertEqual([step.tool for step in plans[0].steps], ["ipintel", "http", "httpx", "fingerprint", "whatweb", "tls", "sslyze", "rdap", "rpcinfo", "nmap"])
+        self.assertEqual([step.tool for step in plans[0].steps], ["ipintel", "http", "httpx", "fingerprint", "whatweb", "tls", "sslyze", "rdap", "rpcinfo", "naabu", "nmap"])
         self.assertEqual(run.rounds, ())
