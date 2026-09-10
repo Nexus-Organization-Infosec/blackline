@@ -118,6 +118,10 @@
       "binary": "rpcinfo",
       "flags": ["-p"]
     },
+    "naabu": {
+      "binary": "naabu",
+      "flags": ["-json", "-silent", "-rate", "1000"]
+    },
     "sslyze": {
       "binary": "sslyze",
       "flags": ["--quiet"]
