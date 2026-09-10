@@ -167,6 +167,17 @@ def observations_from_results(results: Iterable[StepResult], *, fallback_host: s
                 port = str(registration.get("port", "")).strip()
                 if program and port:
                     observations.append(_tag("rpc_program", f"{program}:{port}", "registered", source, 0.95, (f"rpcinfo:{result_index}:{registration_index}",)))
+        elif result.tool == "naabu":
+            host = str(payload.get("target", "") or fallback_host)
+            for port_index, port_data in enumerate(payload.get("ports", ())):
+                if not isinstance(port_data, dict):
+                    continue
+                try:
+                    port = int(port_data.get("port", 0))
+                except (TypeError, ValueError):
+                    continue
+                if 1 <= port <= 65535:
+                    observations.append(Observation.service(host=host, port=port, protocol="unknown", state="open", source=source, confidence=0.9))
         elif result.tool == "sslyze":
             for scan_index, scan in enumerate(payload.get("scans", ())):
                 if not isinstance(scan, dict):
