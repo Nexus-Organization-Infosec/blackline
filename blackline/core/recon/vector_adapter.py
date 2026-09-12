@@ -231,6 +231,9 @@ def normalize_service_protocol(service: str, port: int) -> str:
     web_ports = {int(item) for item in config.get("web_default_ports", ()) if str(item).isdigit()}
     if value in https or (port == 443 and "http" in value):
         return "https"
+    smb = {str(item).lower() for item in config.get("smb_services", ())}
+    if value in smb or (port in {139, 445} and value in {"", "unknown"}):
+        return "smb"
     if "http" in value or (port in web_ports and value in {"", "unknown"}):
         return "http"
     return value or "unknown"
