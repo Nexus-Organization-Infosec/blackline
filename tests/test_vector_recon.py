@@ -86,6 +86,25 @@ class VectorReconTests(unittest.TestCase):
         followup = execute_followup_plan(self.context, decision)
         self.assertEqual([(step.tool, step.action) for step in followup.steps], [("ipintel", "network_intelligence")])
 
+    def test_open_smb_service_creates_anonymous_share_listing_followup(self):
+        vector = create_recon_vector(self.context)
+        smb_discovery = StepResult(
+            tool="nmap",
+            action="port_scan",
+            ok=True,
+            payload={
+                "provider": "nmap",
+                "target": "10.0.0.174",
+                "ports": [{"port": 445, "protocol": "tcp", "state": "open", "service": "microsoft-ds"}],
+            },
+        )
+
+        decision = vector.observe(observations_from_results((smb_discovery,), fallback_host="10.0.0.174"))
+
+        self.assertEqual([(candidate.intent.verb, candidate.intent.subject, candidate.target) for candidate in decision.selected], [("inspect", "smb", "10.0.0.174:445")])
+        followup = execute_followup_plan(self.context, decision)
+        self.assertEqual([(step.tool, step.action, step.params["port"]) for step in followup.steps], [("smbclient", "smb_share_enumeration", "445")])
+
     def test_runner_re_evaluates_real_round_results_before_stopping(self):
         calls = []
 
