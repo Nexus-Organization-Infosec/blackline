@@ -68,11 +68,28 @@ def get_vector_config(name: str) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+@lru_cache(maxsize=1)
+def get_recon_tool_registry_config() -> dict[str, Any]:
+    """Load declarative metadata for recon capabilities and providers."""
+    path = Path(__file__).resolve().parent / "recon_tools.json"
+    try:
+        with path.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+    except FileNotFoundError:
+        _report_config_error(f"missing config: {path}")
+        return {}
+    except (OSError, json.JSONDecodeError) as exc:
+        _report_config_error(f"failed to load config {path}: {exc}")
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def clear_tool_config_cache() -> None:
     """Clear cached tool configuration for tests/reloads."""
     load_tools_config.cache_clear()
     get_tool_installer_config.cache_clear()
     get_vector_config.cache_clear()
+    get_recon_tool_registry_config.cache_clear()
 
 
 def _report_config_error(message: str) -> None:
