@@ -13,6 +13,8 @@
           "katana_seconds": 30,
           "tls_seconds": 10,
           "rdap_seconds": 10,
+          "naabu_seconds": 90,
+          "smbclient_seconds": 15,
           "port_scan_seconds": 0
         }
       },
@@ -117,6 +119,10 @@
     "rpcinfo": {
       "binary": "rpcinfo",
       "flags": ["-p"]
+    },
+    "smbclient": {
+      "binary": "smbclient",
+      "flags": ["-N", "-g"]
     },
     "naabu": {
       "binary": "naabu",
