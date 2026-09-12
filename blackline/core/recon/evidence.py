@@ -46,6 +46,7 @@ def build_evidence_graph(target: str, payloads: dict[str, dict]) -> EvidenceGrap
     whatweb = payloads.get("whatweb", {})
     katana = payloads.get("katana", {})
     rpcinfo = payloads.get("rpcinfo", {})
+    smbclient = payloads.get("smbclient", {})
     naabu = payloads.get("naabu", {})
     sslyze = payloads.get("sslyze", {})
     tls = payloads.get("tls", {})
@@ -168,6 +169,16 @@ def build_evidence_graph(target: str, payloads: dict[str, dict]) -> EvidenceGrap
             label = service or f"program {program} v{version}".strip()
             if label and port:
                 _add_claim(claims, target, "exposes_rpc_service", f"{label} ({protocol}/{port})", rpcinfo_source)
+
+    smb_source = _sources(smbclient, fallback="smbclient")
+    smb_shares = smbclient.get("shares", []) if isinstance(smbclient, dict) else []
+    if isinstance(smb_shares, list):
+        for share in smb_shares:
+            if not isinstance(share, dict):
+                continue
+            name = str(share.get("name", "")).strip()
+            if name:
+                _add_claim(claims, target, "exposes_smb_share", name, smb_source)
 
     naabu_source = _sources(naabu, fallback="naabu")
     naabu_ports = naabu.get("ports", []) if isinstance(naabu, dict) else []
