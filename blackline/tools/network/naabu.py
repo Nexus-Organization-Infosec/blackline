@@ -27,6 +27,8 @@ class NaabuResult:
     error: str = ""
     skipped: bool = False
     negative_observation: bool = False
+    complete: bool = False
+    warnings: tuple[str, ...] = ()
     raw_output: str = ""
     elapsed_seconds: float = 0.0
 
@@ -55,7 +57,28 @@ def scan_ports_with_naabu(
     discovered = tuple(NaabuPort(**item) for item in parse_naabu_jsonl(execution.stdout))
     elapsed = execution.elapsed_seconds or (time.perf_counter() - started)
     if execution.returncode == 0:
-        return NaabuResult(True, target, discovered, negative_observation=not discovered, raw_output=execution.stdout, elapsed_seconds=elapsed)
+        return NaabuResult(
+            True,
+            target,
+            discovered,
+            negative_observation=not discovered,
+            complete=True,
+            raw_output=execution.stdout,
+            elapsed_seconds=elapsed,
+        )
+    if execution.returncode == 124 and discovered:
+        # Naabu streams useful JSONL before a bounded scan expires. Keep those
+        # observations, but never let an incomplete pre-scan narrow or replace
+        # the authoritative Nmap policy.
+        return NaabuResult(
+            True,
+            target,
+            discovered,
+            complete=False,
+            warnings=("Naabu timed out; Nmap used its normal scan coverage.",),
+            raw_output=execution.stdout,
+            elapsed_seconds=elapsed,
+        )
     return NaabuResult(False, target, error=execution.stderr.strip() or "Naabu scan failed", raw_output=execution.stdout, elapsed_seconds=elapsed)
 
 
