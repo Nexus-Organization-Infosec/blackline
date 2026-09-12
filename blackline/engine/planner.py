@@ -42,7 +42,7 @@ def build_plan(context: ExecutionContext) -> ExecutionPlan:
             steps=tuple(
                 _plan_step_from_recon_step(step, context.params)
                 for step in pipeline.steps
-                if step.tool in {"dns", "subfinder", "ipintel", "http", "httpx", "fingerprint", "whatweb", "katana", "tls", "sslyze", "rdap", "rpcinfo", "naabu", "nmap"}
+                if step.tool in {"dns", "subfinder", "ipintel", "http", "httpx", "fingerprint", "whatweb", "katana", "tls", "sslyze", "rdap", "rpcinfo", "smbclient", "naabu", "nmap"}
             ),
             pipeline=pipeline,
         )
@@ -139,6 +139,20 @@ def build_followup_plan(context: ExecutionContext, candidates: tuple[Candidate, 
                         "host": host,
                         "port": str(port),
                         "server_name": target.host if target.target_type != "ip" else "",
+                    },
+                    execution_group=0,
+                )
+            )
+        elif intent.verb == "inspect" and intent.subject == "smb":
+            steps.append(
+                PlanStep(
+                    tool="smbclient",
+                    action="smb_share_enumeration",
+                    params={
+                        "target": context.params.get("target", ""),
+                        "host": host,
+                        "port": str(port),
+                        "target_type": target.target_type,
                     },
                     execution_group=0,
                 )
