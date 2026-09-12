@@ -179,7 +179,7 @@
           "kind": "tool",
           "description": "build an evidence-backed target profile",
           "usage": "recon[target=<ip|domain|url>, strategy=<profile>, ...]",
-          "long_description": "collect DNS, web, TLS, registration, network, and service evidence for an authorized IP address, domain, or URL. Profile controls which checks run; scan settings affect only the service and system scan.",
+          "long_description": "collect DNS, web, TLS, registration, network, and service evidence for an authorized IP address, domain, or URL. Profile controls which checks run; scan settings affect only the service and system scan. Use `recon tools` to inspect available providers and their capability contracts.",
           "arguments": [
             {"name": "target", "description": "required IP address, domain, or URL"},
             {
@@ -206,7 +206,9 @@
             "recon[target=10.0.0.236,strategy=surface]",
             "recon[target=https://example.com,strategy=balanced,ports=1-1024]",
             "recon[target=10.0.0.236,strategy=deep,speed=high,probe=fingerprint]",
-            "recon[target=10.0.0.236,transport=udp,ports=53]"
+            "recon[target=10.0.0.236,transport=udp,ports=53]",
+            "recon tools",
+            "recon tools show naabu"
           ]
         },
         {
