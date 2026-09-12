@@ -1,0 +1,18 @@
+{
+  "tools": [
+    {"name": "naabu", "capability": "port-discovery", "backend": "external", "binary": "naabu", "check_args": ["-version"], "produces": ["host.port"], "consumes": ["host.ip", "domain"], "strategies": ["surface", "fast", "balanced", "quiet", "deep", "auto"]},
+    {"name": "nmap", "capability": "port/service-scan", "backend": "external", "binary": "nmap", "check_args": ["--version"], "produces": ["host.port", "service", "system"], "consumes": ["host.ip", "domain"], "strategies": ["surface", "fast", "balanced", "quiet", "deep", "udp", "auto"]},
+    {"name": "httpx", "capability": "web-probing", "backend": "external", "binary": "httpx", "check_args": ["-version"], "produces": ["web.endpoint", "technology"], "consumes": ["host.ip", "domain", "host.port"], "strategies": ["surface", "fast", "balanced", "quiet", "deep", "udp"]},
+    {"name": "whatweb", "capability": "web-fingerprinting", "backend": "external", "binary": "whatweb", "check_args": ["--version"], "produces": ["technology"], "consumes": ["web.endpoint"], "strategies": ["surface", "fast", "balanced", "quiet", "deep", "udp"]},
+    {"name": "katana", "capability": "web-crawling", "backend": "external", "binary": "katana", "check_args": ["-version"], "produces": ["web.endpoint", "technology"], "consumes": ["domain", "web.endpoint"], "strategies": ["surface", "fast", "balanced", "quiet", "deep", "udp"]},
+    {"name": "subfinder", "capability": "subdomain-enum", "backend": "external", "binary": "subfinder", "check_args": ["-version"], "produces": ["domain.subdomain"], "consumes": ["domain"], "strategies": ["surface", "fast", "balanced", "quiet", "deep", "udp"]},
+    {"name": "rpcinfo", "capability": "rpc-discovery", "backend": "external", "binary": "rpcinfo", "check_args": ["--help"], "check_success_codes": [0, 1], "produces": ["rpc.program"], "consumes": ["host.ip", "domain"], "strategies": ["surface", "fast", "balanced", "quiet", "deep", "udp"]},
+    {"name": "smbclient", "capability": "smb-share-enumeration", "backend": "external", "binary": "smbclient", "check_args": ["--version"], "produces": ["smb.share"], "consumes": ["host.ip", "host.port"], "strategies": ["auto"]},
+    {"name": "sslyze", "capability": "tls-configuration", "backend": "external", "binary": "sslyze", "check_args": ["--version"], "produces": ["tls.configuration"], "consumes": ["web.endpoint", "host.port"], "strategies": ["surface", "fast", "balanced", "quiet", "deep", "udp"]},
+    {"name": "dns", "capability": "dns-resolution", "backend": "native", "produces": ["host.ip", "dns.record"], "consumes": ["domain"], "strategies": ["surface", "fast", "balanced", "quiet", "deep", "udp", "auto"]},
+    {"name": "ipintel", "capability": "network-intelligence", "backend": "service", "produces": ["network.owner", "network.asn"], "consumes": ["host.ip"], "strategies": ["balanced", "quiet", "deep", "udp", "auto"]},
+    {"name": "rdap", "capability": "registration-intelligence", "backend": "service", "produces": ["network.owner", "domain.registration"], "consumes": ["host.ip", "domain"], "strategies": ["surface", "fast", "balanced", "quiet", "deep", "udp"]},
+    {"name": "tls", "capability": "certificate-inspection", "backend": "native", "produces": ["tls.certificate"], "consumes": ["web.endpoint", "host.port"], "strategies": ["surface", "fast", "balanced", "quiet", "deep", "udp"]},
+    {"name": "fingerprint", "capability": "web-fingerprinting", "backend": "native", "produces": ["technology"], "consumes": ["web.endpoint"], "strategies": ["surface", "fast", "balanced", "quiet", "deep", "udp"]}
+  ]
+}
