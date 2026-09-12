@@ -68,7 +68,7 @@ class NaabuToolTests(unittest.TestCase):
         self.assertIn("-p", commands[1])
         self.assertEqual(commands[1][commands[1].index("-p") + 1], "22,443")
 
-    def test_successful_empty_naabu_result_skips_nmap(self):
+    def test_successful_empty_complete_naabu_result_skips_nmap(self):
         plan = ExecutionPlan(
             ExecutionContext(expression="recon[target=example.com]", module="recon"),
             steps=(
@@ -82,6 +82,51 @@ class NaabuToolTests(unittest.TestCase):
 
         self.assertEqual([result.outcome for result in results], ["negative", "skipped"])
         self.assertEqual(len(commands), 1)
+
+    def test_timed_out_naabu_keeps_partial_ports_and_preserves_nmap_coverage(self):
+        plan = ExecutionPlan(
+            ExecutionContext(expression="recon[target=example.com]", module="recon"),
+            steps=(
+                PlanStep("naabu", "fast_port_discovery", {"target": "example.com", "top_ports": "5000"}),
+                PlanStep("nmap", "port_scan", {"target": "example.com", "profile": "balanced", "top_ports": "5000"}, execution_group=1),
+            ),
+        )
+        commands: list[tuple[str, ...]] = []
+
+        def executor(command: tuple[str, ...]) -> CommandResult:
+            commands.append(command)
+            if command[0] == "naabu":
+                return CommandResult(command, 124, '{"ip":"example.com","port":22}\n', "command timed out", 60.0)
+            return CommandResult(command, 0, "Nmap scan report for example.com\n", "", 0.1)
+
+        results = execute_plan(plan, command_executor=executor)
+
+        self.assertEqual(results[0].outcome, "warning")
+        self.assertEqual(results[0].payload["ports"][0]["port"], 22)
+        self.assertFalse(results[0].payload["complete"])
+        self.assertIn("--top-ports", commands[1])
+
+    def test_empty_incomplete_naabu_result_never_skips_nmap(self):
+        plan = ExecutionPlan(
+            ExecutionContext(expression="recon[target=example.com]", module="recon"),
+            steps=(
+                PlanStep("naabu", "fast_port_discovery", {"target": "example.com"}),
+                PlanStep("nmap", "port_scan", {"target": "example.com", "profile": "balanced", "top_ports": "5000"}, execution_group=1),
+            ),
+        )
+        commands: list[tuple[str, ...]] = []
+
+        def executor(command: tuple[str, ...]) -> CommandResult:
+            commands.append(command)
+            if command[0] == "naabu":
+                return CommandResult(command, 124, "", "command timed out", 60.0)
+            return CommandResult(command, 0, "Nmap scan report for example.com\n", "", 0.1)
+
+        results = execute_plan(plan, command_executor=executor)
+
+        self.assertEqual(results[0].outcome, "failed")
+        self.assertEqual(results[1].outcome, "negative")
+        self.assertEqual(len(commands), 2)
 
     @patch("blackline.tools.network.naabu.which", return_value=None)
     def test_missing_binary_is_a_graceful_skip(self, _which):
