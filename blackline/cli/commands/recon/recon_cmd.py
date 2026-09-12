@@ -241,6 +241,7 @@ def _progress_label(step: PlanStep) -> str:
         "whatweb": "WhatWeb fingerprint",
         "katana": "web crawl",
         "rpcinfo": "RPC program registry",
+        "smbclient": "anonymous SMB share listing",
         "naabu": "fast port discovery",
         "sslyze": "TLS configuration analysis",
         "tls": "TLS certificate inspection",
@@ -357,6 +358,7 @@ def render_recon_report(payloads: dict[str, dict], *, use_color: bool | None = N
     whatweb = payloads.get("whatweb", {})
     katana = payloads.get("katana", {})
     rpcinfo = payloads.get("rpcinfo", {})
+    smbclient = payloads.get("smbclient", {})
     naabu = payloads.get("naabu", {})
     sslyze = payloads.get("sslyze", {})
     tls = payloads.get("tls", {})
@@ -382,6 +384,8 @@ def render_recon_report(payloads: dict[str, dict], *, use_color: bool | None = N
         _render_katana_section(katana, use_color=use_color)
     if rpcinfo:
         _render_rpcinfo_section(rpcinfo, use_color=use_color)
+    if smbclient:
+        _render_smbclient_section(smbclient, use_color=use_color)
     if naabu:
         _render_naabu_section(naabu, use_color=use_color)
     if sslyze:
@@ -593,6 +597,34 @@ def _render_rpcinfo_section(payload: dict, *, use_color: bool | None = None) -> 
     write_line(use_color=use_color)
 
 
+def _render_smbclient_section(payload: dict, *, use_color: bool | None = None) -> None:
+    """Render anonymous SMB share metadata without accessing share contents."""
+    _render_section_header("SMB shares", _provider_names(payload, fallback="smbclient"), use_color=use_color)
+    if payload.get("skipped"):
+        _render_field("status", "skipped (smbclient unavailable; run install smbclient)", use_color=use_color)
+        write_line(use_color=use_color)
+        return
+    shares = payload.get("shares", [])
+    if not isinstance(shares, list) or not shares:
+        warnings = payload.get("warnings", [])
+        if isinstance(warnings, list) and warnings:
+            for warning_text in warnings:
+                _render_field("warning", str(warning_text), use_color=use_color)
+        else:
+            _render_field("status", "no anonymously enumerable SMB shares", use_color=use_color)
+        write_line(use_color=use_color)
+        return
+    for share in shares:
+        if not isinstance(share, dict):
+            continue
+        name = str(share.get("name", "")).strip()
+        if name:
+            detail = str(share.get("type", "share"))
+            comment = str(share.get("comment", "")).strip()
+            _render_field(name, f"{detail}" + (f" · {comment}" if comment else ""), use_color=use_color)
+    write_line(use_color=use_color)
+
+
 def _render_naabu_section(payload: dict, *, use_color: bool | None = None) -> None:
     """Render Naabu's fast port inventory before detailed Nmap evidence."""
     _render_section_header("port discovery", _provider_names(payload, fallback="naabu"), use_color=use_color)
@@ -610,6 +642,10 @@ def _render_naabu_section(payload: dict, *, use_color: bool | None = None) -> No
         if isinstance(port, dict):
             values.append(f"{port.get('port')}/{port.get('protocol', 'tcp')}")
     _render_field("open", ", ".join(values) or "unknown", use_color=use_color)
+    warnings = payload.get("warnings", [])
+    if isinstance(warnings, list):
+        for warning_text in warnings:
+            _render_field("warning", str(warning_text), use_color=use_color)
     write_line(use_color=use_color)
 
 
