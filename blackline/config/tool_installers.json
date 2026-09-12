@@ -79,6 +79,17 @@
         ]
       }
     },
+    "smbclient": {
+      "binary": "smbclient",
+      "platforms": {
+        "Darwin": [
+          {"manager": "Homebrew", "manager_binary": "brew", "command": ["brew", "install", "samba"]}
+        ],
+        "Linux": [
+          {"manager": "APT", "manager_binary": "apt-get", "command": ["apt-get", "install", "-y", "smbclient"]}
+        ]
+      }
+    },
     "naabu": {
       "binary": "naabu",
       "platforms": {
