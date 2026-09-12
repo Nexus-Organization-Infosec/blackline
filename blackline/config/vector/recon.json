@@ -36,6 +36,13 @@
       "cost": 2
     },
     {
+      "verb": "inspect",
+      "subject": "smb",
+      "requires": [{"entity": "service", "value": "smb", "state": "open"}],
+      "priority": 3,
+      "cost": 2
+    },
+    {
       "verb": "collect",
       "subject": "network_intelligence_after_failure",
       "requires": [{"entity": "discovery", "value": "nmap", "state": "failed"}],
@@ -62,6 +69,7 @@
   "overrides": {"transport": {"udp": {}}},
   "service_normalization": {
     "https_services": ["https", "ssl/http", "ssl|http"],
+    "smb_services": ["smb", "microsoft-ds", "netbios-ssn"],
     "web_default_ports": [80, 3000, 8000, 8080, 8443]
   }
 }
