@@ -22,6 +22,7 @@ from blackline.tools.http.whatweb import fingerprint_with_whatweb
 from blackline.tools.network.nmap import NmapRequest, display_command, execute_nmap
 from blackline.tools.network.naabu import scan_ports_with_naabu
 from blackline.tools.network.rpcinfo import query_rpcinfo
+from blackline.tools.network.smbclient import enumerate_smb_shares
 from blackline.tools.tls.inspector import inspect_tls
 from blackline.tools.tls.sslyze import inspect_tls_configuration
 from blackline.utils.exec import CommandResult
@@ -369,6 +370,26 @@ def execute_step(
         }
         return StepResult(step.tool, step.action, rpc_result.ok, payload, rpc_result.error)
 
+    if step.tool == "smbclient":
+        smb_result = enumerate_smb_shares(
+            str(step.params.get("host") or step.params.get("target") or ""),
+            port=_to_port(step.params.get("port") or "445"),
+            timeout_seconds=timeout_seconds or 15.0,
+            executor=command_executor,
+        )
+        payload = {
+            "target": smb_result.target,
+            "port": smb_result.port,
+            "provider": "smbclient",
+            "shares": [{"name": share.name, "type": share.type, "comment": share.comment} for share in smb_result.shares],
+            "skipped": smb_result.skipped,
+            "negative_observation": smb_result.negative_observation,
+            "warnings": list(smb_result.warnings),
+            "raw_output": smb_result.raw_output,
+            "elapsed_seconds": smb_result.elapsed_seconds,
+        }
+        return StepResult(step.tool, step.action, smb_result.ok, payload, smb_result.error)
+
     if step.tool == "sslyze":
         port = int(str(step.params.get("port") or "443"))
         sslyze_result = inspect_tls_configuration(
@@ -491,6 +512,8 @@ def execute_step(
             ],
             "skipped": naabu_result.skipped,
             "negative_observation": naabu_result.negative_observation,
+            "complete": bool(getattr(naabu_result, "complete", True)),
+            "warnings": list(getattr(naabu_result, "warnings", ())),
             "raw_output": naabu_result.raw_output,
             "elapsed_seconds": naabu_result.elapsed_seconds,
         }
@@ -499,7 +522,7 @@ def execute_step(
     if step.tool == "nmap":
         runtime_state = runtime_state or {}
         naabu_ports = runtime_state.get("naabu_open_ports")
-        if runtime_state.get("naabu_completed") and isinstance(naabu_ports, list) and not naabu_ports:
+        if runtime_state.get("naabu_completed") and runtime_state.get("naabu_complete") and isinstance(naabu_ports, list) and not naabu_ports:
             return StepResult(
                 step.tool,
                 step.action,
@@ -514,7 +537,7 @@ def execute_step(
                 },
                 error="Naabu found no open TCP ports",
             )
-        discovered_ports = _nmap_ports_from_naabu(naabu_ports)
+        discovered_ports = _nmap_ports_from_naabu(naabu_ports) if runtime_state.get("naabu_completed") and runtime_state.get("naabu_complete") else ""
         execution = _execute_nmap_step(
             NmapRequest(
                 target=step.params.get("target", ""),
@@ -598,6 +621,7 @@ def _update_runtime_state(runtime_state: dict[str, object], result: StepResult) 
         if isinstance(ports, list):
             runtime_state["naabu_open_ports"] = list(ports)
             runtime_state["naabu_completed"] = result.ok
+            runtime_state["naabu_complete"] = bool(result.payload.get("complete", False))
 
 
 def _nmap_ports_from_naabu(value: object) -> str:
@@ -636,10 +660,12 @@ def _step_timeout_seconds(tool: str) -> float | None:
         "whatweb": "http_fingerprint_seconds",
         "katana": "katana_seconds",
         "rpcinfo": "nmap_seconds",
+        "smbclient": "smbclient_seconds",
         "fingerprint": "http_fingerprint_seconds",
         "tls": "tls_seconds",
         "sslyze": "tls_seconds",
         "rdap": "rdap_seconds",
+        "naabu": "naabu_seconds",
         "nmap": "port_scan_seconds",
     }
     raw = timeouts.get(key_map.get(tool, ""))
