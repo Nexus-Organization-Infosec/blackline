@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from blackline.core.recon.models import ReconStep, ReconTarget, normalize_recon_target
+from blackline.core.recon.tool_registry import is_recon_tool_enabled
 from blackline.core.recon.steps.dns import dns_step
 from blackline.core.recon.steps.http import http_ip_probe_step, http_probe_step, httpx_probe_step
 from blackline.core.recon.steps.ipintel import ipintel_step
@@ -109,4 +110,8 @@ def recon_profile_name(params: dict[str, str]) -> str:
 
 def _select_profile_steps(steps: tuple[ReconStep, ...], profile: str) -> tuple[ReconStep, ...]:
     enabled_tools = PROFILE_TOOLS[profile]
-    return tuple(step for step in steps if step.tool == "reverse_dns" or step.tool in enabled_tools)
+    return tuple(
+        step
+        for step in steps
+        if step.tool == "reverse_dns" or (step.tool in enabled_tools and is_recon_tool_enabled(step.tool))
+    )
