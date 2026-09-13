@@ -52,10 +52,10 @@ class ReconCommandTests(unittest.TestCase):
 
         text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", output.getvalue())
         self.assertIn("[plan] preparing 2 checks", text)
-        self.assertIn("network intelligence", text)
-        self.assertIn("service and system scan", text)
+        self.assertIn("network details", text)
+        self.assertIn("detailed port scan", text)
         self.assertIn("running", text)
-        self.assertIn("done", text)
+        self.assertIn("complete", text)
         self.assertNotIn("%", text)
 
     def test_progress_state_treats_closed_http_endpoints_as_negative_observations(self):
@@ -75,6 +75,9 @@ class ReconCommandTests(unittest.TestCase):
         )
 
         self.assertEqual(state, "negative")
+
+    def test_progress_display_uses_unavailable_for_failed_optional_checks(self):
+        self.assertEqual(recon_cmd._progress_display_state("failed"), "unavailable")
 
     def test_render_recon_report_uses_curated_findings_and_provenance(self):
         output = io.StringIO()
@@ -121,7 +124,7 @@ class ReconCommandTests(unittest.TestCase):
         }
 
         with redirect_stdout(output):
-            recon_cmd.render_recon_report(payloads, use_color=False)
+            recon_cmd.render_recon_report(payloads, use_color=False, include_correlation=False)
 
         text = output.getvalue()
         self.assertIn("network  (source: yougotmapped)", text)
@@ -132,6 +135,28 @@ class ReconCommandTests(unittest.TestCase):
         self.assertIn("OpenSSH 10.2", text)
         self.assertIn("Darwin 22.3.0", text)
         self.assertNotIn("Starting Nmap", text)
+
+    def test_report_collapses_empty_web_related_checks_into_one_plain_language_section(self):
+        output = io.StringIO()
+        payloads = {
+            "http": {"provider": "urllib", "findings": [{"url": "http://127.0.0.1", "status_code": None}]},
+            "httpx": {"provider": "httpx", "findings": []},
+            "fingerprint": {"provider": "urllib", "skipped": True},
+            "whatweb": {"provider": "whatweb", "findings": []},
+            "tls": {"provider": "python ssl", "host": "127.0.0.1", "port": 443},
+            "sslyze": {"provider": "sslyze", "scans": []},
+            "correlation": {"claims": [{"predicate": "exposes_port", "value": "22/tcp"}]},
+        }
+
+        with redirect_stdout(output):
+            recon_cmd.render_recon_report(payloads, use_color=False, include_correlation=False)
+
+        text = output.getvalue()
+        self.assertIn("No web service found (HTTP or HTTPS)", text)
+        self.assertEqual(text.count("web  ("), 1)
+        self.assertNotIn("web fingerprint", text)
+        self.assertNotIn("tls configuration", text)
+        self.assertNotIn("correlation", text)
 
     def test_handle_recon_renders_result_summary(self):
         original_run_expression = recon_cmd.run_expression
