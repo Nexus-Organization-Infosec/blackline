@@ -8,9 +8,9 @@ from typing import Callable
 from blackline.cli.auth import ensure_elevated_session
 from blackline.cli.commands.network.network_cmd import handle_network
 from blackline.cli.commands.recon.recon_cmd import handle_recon, validate_recon_expression
-from blackline.cli.commands.recon.tool_registry_cmd import handle_recon_tools
 from blackline.cli.commands.system.help_cmd import handle_help
 from blackline.cli.commands.system.jobs_cmd import handle_delete_job, handle_enter, handle_jobs, handle_new, handle_show
+from blackline.cli.commands.system.tools_cmd import handle_tools
 from blackline.cli.commands.templates.template_cmd import handle_edit, handle_list_templates, handle_load, handle_run, handle_use
 from blackline.cli.commands.utils.tool_install_cmd import handle_install
 from blackline.cli.commands.utils.shell_cmds import (
@@ -118,6 +118,8 @@ def dispatch_command(
     if command.name == "network" and not command.argument:
         handle_network()
         return DispatchResult()
+    if command.name == "tools":
+        return DispatchResult(exit_code=0 if handle_tools(command.argument) else 1)
     if command.name == "list" and command.argument.lower() in {"", "templates"}:
         return DispatchResult(exit_code=0 if handle_list_templates(state) else 1)
     if command.name == "load":
@@ -130,8 +132,6 @@ def dispatch_command(
         return DispatchResult(exit_code=0 if handle_edit(command.argument, state) else 1)
     if command.name == "run":
         return DispatchResult(exit_code=0 if handle_run(command.argument, state) else 1)
-    if command.name == "recon" and command.argument.lower().startswith("tools"):
-        return DispatchResult(exit_code=0 if handle_recon_tools(command.argument) else 1)
     if command.name == "recon":
         return _dispatch_recon(command.raw, state, manage_elevation=manage_elevation)
     if command.name == "help":
