@@ -15,8 +15,8 @@ from blackline.config.tool_loader import get_tool_config
 from blackline.cli.commands.system.help_cmd import load_help_groups, load_operators
 from blackline.cli.commands.system.jobs_cmd import list_jobs
 from blackline.templates import TemplateRegistry
-from blackline.tools.installer import installable_tool_names
-from blackline.core.recon.tool_registry import recon_tools
+from blackline.tools.installer import installable_tool_groups, installable_tool_names
+from blackline.cli.commands.system.tools_cmd import known_tool_names
 
 STATIC_COMMANDS = (("quit", "command"),)
 COMPLETION_KINDS = frozenset({"command", "tool", "operator", "workflow", "plugin", "template", "option", "value"})
@@ -95,9 +95,6 @@ def completion_items(text: str) -> list[tuple[str, str]]:
     if is_bracket_command(leading):
         return bracket_command_items(leading)
 
-    if leading.startswith("recon tools"):
-        return recon_tool_completion_items(leading)
-
     if " " not in leading:
         return [(name, kind) for name, kind in command_items() if name.startswith(leading.lower())]
 
@@ -119,7 +116,20 @@ def completion_items(text: str) -> list[tuple[str, str]]:
 
     if leading.startswith("install "):
         prefix = leading.removeprefix("install ").strip().lower()
-        return [(tool, "tool") for tool in installable_tool_names() if tool.startswith(prefix)]
+        if prefix.startswith("all "):
+            group_prefix = prefix.removeprefix("all ").strip()
+            return [(group, "tool group") for group in installable_tool_groups() if group.startswith(group_prefix)]
+        items = [(tool, "tool") for tool in installable_tool_names() if tool.startswith(prefix)]
+        if "all".startswith(prefix):
+            items.append(("all", "tool group"))
+        return items
+
+    if leading.startswith("tools "):
+        prefix = leading.removeprefix("tools ").strip().lower()
+        items = [(name, "tool") for name in known_tool_names() if name.startswith(prefix)]
+        if "recon".startswith(prefix):
+            items.append(("recon", "tool group"))
+        return items
 
     if leading.startswith("list "):
         prefix = leading.removeprefix("list ").strip().lower()
@@ -202,24 +212,6 @@ def template_target_items(text: str, *, command: str) -> list[tuple[str, str]]:
     if command == "run" and not prefix:
         return [(name, "template") for name in template_names()]
     return [(name, "template") for name in template_names() if name.startswith(prefix)]
-
-
-def recon_tool_completion_items(text: str) -> list[tuple[str, str]]:
-    """Complete metadata-backed recon registry subcommands and provider names."""
-    words = text.split()
-    tools = tuple(tool.name for tool in recon_tools())
-    if len(words) <= 1:
-        return [("tools", "value")]
-    if len(words) == 2:
-        prefix = "" if text.endswith(" ") else words[-1].lower()
-        return [(item, "value") for item in ("tools",) if item.startswith(prefix)]
-    if len(words) == 3:
-        prefix = "" if text.endswith(" ") else words[-1].lower()
-        return [(item, "value") for item in ("show", "check", "enable", "disable") if item.startswith(prefix)]
-    if len(words) == 4 and words[2].lower() in {"show", "enable", "disable"}:
-        prefix = "" if text.endswith(" ") else words[-1].lower()
-        return [(tool, "tool") for tool in tools if tool.startswith(prefix)]
-    return []
 
 
 def template_path_items(text: str) -> list[tuple[str, str]]:
