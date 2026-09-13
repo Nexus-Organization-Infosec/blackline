@@ -47,11 +47,11 @@
         {
           "name": "install",
           "kind": "command",
-          "description": "install an optional external tool",
-          "usage": "install <tool>",
-          "long_description": "install a configured optional tool using the first supported package manager on this system. Installation runs only after this explicit command.",
+          "description": "install optional external tools",
+          "usage": "install <tool> | install all [group]",
+          "long_description": "Install one configured tool, every configured tool, or a named group. Each tool uses the first supported package manager and can fall back to a declared source clone-and-build recipe. Installation runs only after this explicit command.",
           "arguments": [["tool", "configured tool name, such as httpx"]],
-          "examples": ["install httpx"]
+          "examples": ["install httpx", "install all recon", "install all"]
         },
         {
           "name": "list",
@@ -179,7 +179,7 @@
           "kind": "tool",
           "description": "build an evidence-backed target profile",
           "usage": "recon[target=<ip|domain|url>, strategy=<profile>, ...]",
-          "long_description": "collect DNS, web, TLS, registration, network, and service evidence for an authorized IP address, domain, or URL. Profile controls which checks run; scan settings affect only the service and system scan. Use `recon tools` to inspect available providers and their capability contracts.",
+          "long_description": "collect DNS, web, TLS, registration, network, and service evidence for an authorized IP address, domain, or URL. Profile controls which checks run; scan settings affect only the service and system scan. Use `tools recon` to inspect available providers and their capability contracts.",
           "arguments": [
             {"name": "target", "description": "required IP address, domain, or URL"},
             {
@@ -206,10 +206,17 @@
             "recon[target=10.0.0.236,strategy=surface]",
             "recon[target=https://example.com,strategy=balanced,ports=1-1024]",
             "recon[target=10.0.0.236,strategy=deep,speed=high,probe=fingerprint]",
-            "recon[target=10.0.0.236,transport=udp,ports=53]",
-            "recon tools",
-            "recon tools show naabu"
+            "recon[target=10.0.0.236,transport=udp,ports=53]"
           ]
+        },
+        {
+          "name": "tools",
+          "kind": "command",
+          "description": "list configured tools and their installation status",
+          "usage": "tools [recon|<tool>]",
+          "long_description": "List every configured tool, restrict the list to reconnaissance providers, or inspect one tool's location, version, capability, supported platforms, and install routes.",
+          "arguments": [["recon", "show only reconnaissance providers"], ["tool", "show details for one tool"]],
+          "examples": ["tools", "tools recon", "tools httpx"]
         },
         {
           "name": "find_exploit",
