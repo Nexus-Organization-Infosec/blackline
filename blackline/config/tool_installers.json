@@ -1,4 +1,7 @@
 {
+  "groups": {
+    "recon": ["httpx", "whatweb", "katana", "rpcinfo", "smbclient", "naabu", "sslyze", "subfinder"]
+  },
   "tools": {
     "httpx": {
       "binary": "httpx",
@@ -44,6 +47,14 @@
             "command": ["go", "install", "github.com/projectdiscovery/httpx/cmd/httpx@latest"]
           }
         ]
+      },
+      "source_builds": {
+        "Darwin": [
+          {"manager": "Git + Go", "repository": "https://github.com/projectdiscovery/httpx.git", "required_binaries": ["git", "go"], "build_commands": [["go", "build", "-o", "{install_dir}/{binary}", "./cmd/httpx"]]}
+        ],
+        "Linux": [
+          {"manager": "Git + Go", "repository": "https://github.com/projectdiscovery/httpx.git", "required_binaries": ["git", "go"], "build_commands": [["go", "build", "-o", "{install_dir}/{binary}", "./cmd/httpx"]]}
+        ]
       }
     },
     "whatweb": {
@@ -68,6 +79,17 @@
         ],
         "Windows": [
           {"manager": "Go", "manager_binary": "go", "command": ["go", "install", "github.com/projectdiscovery/katana/cmd/katana@latest"]}
+        ]
+      },
+      "source_builds": {
+        "Darwin": [
+          {"manager": "Git + Go", "repository": "https://github.com/projectdiscovery/katana.git", "required_binaries": ["git", "go"], "build_commands": [["go", "build", "-o", "{install_dir}/{binary}", "./cmd/katana"]]}
+        ],
+        "Linux": [
+          {"manager": "Git + Go", "repository": "https://github.com/projectdiscovery/katana.git", "required_binaries": ["git", "go"], "build_commands": [["go", "build", "-o", "{install_dir}/{binary}", "./cmd/katana"]]}
+        ],
+        "Windows": [
+          {"manager": "Git + Go", "repository": "https://github.com/projectdiscovery/katana.git", "required_binaries": ["git", "go"], "build_commands": [["go", "build", "-o", "{install_dir}/{binary}", "./cmd/katana"]]}
         ]
       }
     },
@@ -103,6 +125,17 @@
         "Windows": [
           {"manager": "Go", "manager_binary": "go", "command": ["go", "install", "github.com/projectdiscovery/naabu/v2/cmd/naabu@latest"]}
         ]
+      },
+      "source_builds": {
+        "Darwin": [
+          {"manager": "Git + Go", "repository": "https://github.com/projectdiscovery/naabu.git", "required_binaries": ["git", "go"], "build_commands": [["go", "build", "-o", "{install_dir}/{binary}", "./cmd/naabu"]]}
+        ],
+        "Linux": [
+          {"manager": "Git + Go", "repository": "https://github.com/projectdiscovery/naabu.git", "required_binaries": ["git", "go"], "build_commands": [["go", "build", "-o", "{install_dir}/{binary}", "./cmd/naabu"]]}
+        ],
+        "Windows": [
+          {"manager": "Git + Go", "repository": "https://github.com/projectdiscovery/naabu.git", "required_binaries": ["git", "go"], "build_commands": [["go", "build", "-o", "{install_dir}/{binary}", "./cmd/naabu"]]}
+        ]
       }
     },
     "sslyze": {
@@ -132,6 +165,17 @@
         ],
         "Windows": [
           {"manager": "Go", "manager_binary": "go", "command": ["go", "install", "github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest"]}
+        ]
+      },
+      "source_builds": {
+        "Darwin": [
+          {"manager": "Git + Go", "repository": "https://github.com/projectdiscovery/subfinder.git", "required_binaries": ["git", "go"], "build_commands": [["go", "build", "-o", "{install_dir}/{binary}", "./cmd/subfinder"]]}
+        ],
+        "Linux": [
+          {"manager": "Git + Go", "repository": "https://github.com/projectdiscovery/subfinder.git", "required_binaries": ["git", "go"], "build_commands": [["go", "build", "-o", "{install_dir}/{binary}", "./cmd/subfinder"]]}
+        ],
+        "Windows": [
+          {"manager": "Git + Go", "repository": "https://github.com/projectdiscovery/subfinder.git", "required_binaries": ["git", "go"], "build_commands": [["go", "build", "-o", "{install_dir}/{binary}", "./cmd/subfinder"]]}
         ]
       }
     }
