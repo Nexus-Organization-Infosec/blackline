@@ -110,7 +110,7 @@ def handle_recon(
             evidence = build_evidence_graph(run.context.params.get("target", ""), report_payloads)
             report_payloads["correlation"] = evidence.to_dict()
             record_evidence_graph(active_job, evidence.to_dict(), jobs_root=jobs_root)
-        render_recon_report(report_payloads, use_color=use_color)
+        render_recon_report(report_payloads, use_color=use_color, include_correlation=False)
         render_recon_summary(
             completion_state,
             nmap_payload=last_successful_nmap_payload,
@@ -210,8 +210,7 @@ class ReconProgressRenderer:
         if cancelled:
             self.states = ["skipped" if state == "pending" else state for state in self.states]
         completed = sum(state in {"done", "negative", "warning", "failed", "skipped"} for state in self.states)
-        headline = "completed" if completed == self.total else "finished"
-        self._render(f"{completed} checks {headline}")
+        self._render(f"{completed} checks finished")
 
     def _render(self, headline: str) -> None:
         if self.rendered:
@@ -223,7 +222,7 @@ class ReconProgressRenderer:
             label = _progress_label(step)
             dots = "." * max(3, 32 - len(label))
             prefix = colorize(f"       {label} {dots} ", "muted", enabled=True)
-            sys.stdout.write(f"\033[2K{prefix}{colorize(state, _progress_color(state), enabled=True)}\n")
+            sys.stdout.write(f"\033[2K{prefix}{colorize(_progress_display_state(state), _progress_color(state), enabled=True)}\n")
         sys.stdout.flush()
         self.rendered = True
         self.rendered_lines = self.total + 1
@@ -234,19 +233,19 @@ def _progress_label(step: PlanStep) -> str:
     labels = {
         "dns": "DNS lookup",
         "subfinder": "passive subdomain discovery",
-        "ipintel": "network intelligence",
-        "http": "web probe",
-        "httpx": "httpx service confirmation",
-        "fingerprint": "web fingerprint",
-        "whatweb": "WhatWeb fingerprint",
-        "katana": "web crawl",
-        "rpcinfo": "RPC program registry",
-        "smbclient": "anonymous SMB share listing",
-        "naabu": "fast port discovery",
-        "sslyze": "TLS configuration analysis",
-        "tls": "TLS certificate inspection",
-        "rdap": "RDAP registration and ownership",
-        "nmap": "service and system scan",
+        "ipintel": "network details",
+        "http": "web service check",
+        "httpx": "web service check",
+        "fingerprint": "website technology check",
+        "whatweb": "website technology check",
+        "katana": "website page check",
+        "rpcinfo": "RPC service check",
+        "smbclient": "SMB share check",
+        "naabu": "quick port check",
+        "sslyze": "HTTPS security check",
+        "tls": "HTTPS certificate check",
+        "rdap": "domain and owner lookup",
+        "nmap": "detailed port scan",
     }
     return labels.get(step.tool, step.action.replace("_", " "))
 
@@ -278,6 +277,17 @@ def _progress_color(state: str) -> str:
         "skipped": "muted",
         "pending": "muted",
     }.get(state, "white")
+
+
+def _progress_display_state(state: str) -> str:
+    """Translate internal outcome names into direct, user-facing language."""
+    return {
+        "done": "complete",
+        "negative": "not found",
+        "warning": "incomplete",
+        "failed": "unavailable",
+        "skipped": "not needed",
+    }.get(state, state)
 
 
 def validate_recon_expression(expression: str) -> str:
@@ -347,7 +357,12 @@ def render_recon_context(params: dict[str, str], *, use_color: bool | None = Non
         write_line(use_color=use_color)
 
 
-def render_recon_report(payloads: dict[str, dict], *, use_color: bool | None = None) -> None:
+def render_recon_report(
+    payloads: dict[str, dict],
+    *,
+    use_color: bool | None = None,
+    include_correlation: bool = True,
+) -> None:
     """Render normalized findings while raw adapter output remains in the job."""
     ipintel = payloads.get("ipintel", {})
     dns = payloads.get("dns", {})
@@ -372,35 +387,74 @@ def render_recon_report(payloads: dict[str, dict], *, use_color: bool | None = N
         _render_dns_report(dns, use_color=use_color)
     if subfinder:
         _render_subfinder_section(subfinder, use_color=use_color)
-    if http:
-        _render_web_section(http, use_color=use_color)
-    if httpx:
-        _render_httpx_section(httpx, use_color=use_color)
-    if fingerprint:
-        _render_web_fingerprint_section(fingerprint, use_color=use_color)
-    if whatweb:
-        _render_whatweb_section(whatweb, use_color=use_color)
-    if katana:
-        _render_katana_section(katana, use_color=use_color)
+    web_evidence_found = _has_web_service(http) or _has_web_service(httpx) or _has_web_evidence(fingerprint, whatweb, katana)
+    if web_evidence_found:
+        if http:
+            _render_web_section(http, use_color=use_color)
+        if httpx:
+            _render_httpx_section(httpx, use_color=use_color)
+        if fingerprint:
+            _render_web_fingerprint_section(fingerprint, use_color=use_color)
+        if whatweb:
+            _render_whatweb_section(whatweb, use_color=use_color)
+        if katana:
+            _render_katana_section(katana, use_color=use_color)
+    elif any((http, httpx, fingerprint, whatweb, katana, tls, sslyze)):
+        _render_no_web_service_section(http, httpx, use_color=use_color)
     if rpcinfo:
         _render_rpcinfo_section(rpcinfo, use_color=use_color)
     if smbclient:
         _render_smbclient_section(smbclient, use_color=use_color)
     if naabu:
         _render_naabu_section(naabu, use_color=use_color)
-    if sslyze:
+    if sslyze and _has_tls_evidence(sslyze):
         _render_sslyze_section(sslyze, use_color=use_color)
-    if tls:
+    if tls and _has_tls_evidence(tls):
         _render_tls_section(tls, use_color=use_color)
     if rdap:
         _render_rdap_sections(rdap, use_color=use_color)
-    if correlation:
-        _render_correlation_section(correlation, use_color=use_color)
     if nmap:
         _render_services_section(nmap, use_color=use_color)
         _render_system_section(nmap, use_color=use_color)
+    if correlation and include_correlation:
+        _render_correlation_section(correlation, use_color=use_color)
     if ipintel:
         _render_anonymity_section(ipintel, use_color=use_color)
+
+
+def _has_web_service(payload: dict) -> bool:
+    """Return whether a web probe observed an HTTP response."""
+    findings = payload.get("findings", [])
+    return isinstance(findings, list) and any(
+        isinstance(finding, dict) and isinstance(finding.get("status_code"), int)
+        for finding in findings
+    )
+
+
+def _has_web_evidence(fingerprint: dict, whatweb: dict, katana: dict) -> bool:
+    """Keep a web section when another adapter recorded a real web finding."""
+    if any(str(fingerprint.get(key, "")).strip().lower() not in {"", "unknown"} for key in ("server", "framework", "cms", "javascript")):
+        return True
+    return any(
+        isinstance(payload.get("findings"), list) and bool(payload["findings"])
+        for payload in (whatweb, katana)
+    )
+
+
+def _has_tls_evidence(payload: dict) -> bool:
+    """Return whether a TLS adapter observed a real certificate or configuration."""
+    scans = payload.get("scans", [])
+    if isinstance(scans, list) and scans:
+        return True
+    return any(str(payload.get(key, "")).strip() for key in ("protocol", "subject", "issuer", "certificate_sha256"))
+
+
+def _render_no_web_service_section(http: dict, httpx: dict, *, use_color: bool | None = None) -> None:
+    """Replace several dependent empty sections with one direct conclusion."""
+    providers = tuple(dict.fromkeys((*_provider_names(http), *_provider_names(httpx))))
+    _render_section_header("web", providers, use_color=use_color)
+    _render_field("status", "No web service found (HTTP or HTTPS)", use_color=use_color)
+    write_line(use_color=use_color)
 
 
 def _render_network_section(payload: dict, *, use_color: bool | None = None) -> None:
@@ -645,7 +699,7 @@ def _render_naabu_section(payload: dict, *, use_color: bool | None = None) -> No
     warnings = payload.get("warnings", [])
     if isinstance(warnings, list):
         for warning_text in warnings:
-            _render_field("warning", str(warning_text), use_color=use_color)
+            _render_field("note", str(warning_text).replace("Naabu", "Quick port check"), use_color=use_color)
     write_line(use_color=use_color)
 
 
