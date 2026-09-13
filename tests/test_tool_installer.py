@@ -1,6 +1,19 @@
+import io
 import unittest
+from contextlib import redirect_stdout
 
-from blackline.tools.installer import install_tool, installation_plans, installable_tool_names
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
+
+from blackline.cli.commands.utils.tool_install_cmd import handle_install
+from blackline.tools.installer import (
+    install_tool,
+    installation_plans,
+    installable_tool_names,
+    source_build_plans,
+    tools_for_install_group,
+)
 from blackline.utils.exec import CommandResult
 
 
@@ -18,6 +31,23 @@ CONFIG = {
     }
 }
 
+SOURCE_CONFIG = {
+    "tools": {
+        "source-sample": {
+            "binary": "source-sample",
+            "source_builds": {
+                "Darwin": [{
+                    "manager": "Git + Make",
+                    "repository": "https://example.test/source-sample.git",
+                    "ref": "v1.2.3",
+                    "required_binaries": ["git", "make"],
+                    "build_commands": [["make", "install", "PREFIX={install_dir}"]],
+                }]
+            },
+        }
+    }
+}
+
 
 def command_result(command, *, returncode=0, stderr=""):
     return CommandResult(tuple(command), returncode, "", stderr, 0.01)
@@ -26,6 +56,11 @@ def command_result(command, *, returncode=0, stderr=""):
 class ToolInstallerTests(unittest.TestCase):
     def test_names_are_loaded_from_declarative_config(self):
         self.assertEqual(installable_tool_names(config=CONFIG), ("sample",))
+
+    def test_group_selects_configured_members_and_all_selects_everything(self):
+        config = {**CONFIG, "groups": {"recon": ["sample", "missing"]}}
+        self.assertEqual(tools_for_install_group("recon", config=config), ("sample",))
+        self.assertEqual(tools_for_install_group(config=config), ("sample",))
 
     def test_selects_first_available_manager_in_recipe_order(self):
         plans = installation_plans(
@@ -78,6 +113,91 @@ class ToolInstallerTests(unittest.TestCase):
         self.assertTrue(outcome.attempted)
         self.assertFalse(outcome.installed)
         self.assertIn("network unavailable", outcome.message)
+
+    def test_source_plan_requires_its_build_dependencies(self):
+        plans = source_build_plans(
+            "source-sample", platform_name="Darwin", config=SOURCE_CONFIG,
+            executable_resolver=lambda name: f"/usr/bin/{name}" if name in {"git", "make"} else None,
+        )
+        self.assertEqual(len(plans), 1)
+        self.assertEqual(plans[0].repository, "https://example.test/source-sample.git")
+
+    def test_source_install_clones_then_builds_into_user_local_bin(self):
+        commands = []
+        available = {"value": False}
+
+        def resolver(name):
+            if name in {"git", "make"}:
+                return f"/usr/bin/{name}"
+            return "/tmp/source-sample" if name == "source-sample" and available["value"] else None
+
+        def executor(command):
+            commands.append(("checkout", command))
+            return command_result(command)
+
+        def builder(command, cwd):
+            commands.append(("build", command, cwd))
+            available["value"] = True
+            return command_result(command)
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            outcome = install_tool(
+                "source-sample", platform_name="Darwin", config=SOURCE_CONFIG,
+                executable_resolver=resolver, executor=executor, build_executor=builder,
+                source_root=root / "sources", install_dir=root / "bin",
+            )
+
+        self.assertTrue(outcome.installed)
+        self.assertTrue(outcome.available)
+        self.assertEqual(commands[0][1][:4], ("git", "clone", "--depth", "1"))
+        self.assertEqual(commands[1][0], "build")
+        self.assertIn("PREFIX=", commands[1][1][-1])
+
+    def test_source_build_is_used_after_a_package_manager_failure(self):
+        config = {
+            "tools": {
+                "source-sample": {
+                    **SOURCE_CONFIG["tools"]["source-sample"],
+                    "platforms": {"Darwin": [{"manager": "Broken manager", "manager_binary": "brew", "command": ["brew", "install", "source-sample"]}]},
+                }
+            }
+        }
+        events = []
+
+        def resolver(name):
+            return f"/usr/bin/{name}" if name in {"brew", "git", "make"} else None
+
+        def executor(command):
+            events.append(command)
+            return command_result(command, returncode=1, stderr="unavailable") if command[0] == "brew" else command_result(command)
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            outcome = install_tool(
+                "source-sample", platform_name="Darwin", config=config, executable_resolver=resolver,
+                executor=executor, build_executor=lambda command, _cwd: command_result(command),
+                source_root=root / "sources", install_dir=root / "bin",
+            )
+
+        self.assertTrue(outcome.installed)
+        self.assertEqual(events[0][0], "brew")
+        self.assertEqual(events[1][0], "git")
+
+    def test_install_all_continues_after_one_tool_fails(self):
+        success = type("Outcome", (), {"installed": True, "message": "installed"})()
+        failure = type("Outcome", (), {"installed": False, "message": "missing dependency"})()
+        output = io.StringIO()
+        with patch("blackline.cli.commands.utils.tool_install_cmd.tools_for_install_group", return_value=("httpx", "naabu")), patch(
+            "blackline.cli.commands.utils.tool_install_cmd.install_tool", side_effect=(success, failure)
+        ) as install:
+            with redirect_stdout(output):
+                completed = handle_install("all recon", use_color=False)
+
+        self.assertFalse(completed)
+        self.assertEqual(install.call_args_list[0].args, ("httpx",))
+        self.assertEqual(install.call_args_list[1].args, ("naabu",))
+        self.assertIn("1/2 tools installed", output.getvalue())
 
 
 if __name__ == "__main__":
