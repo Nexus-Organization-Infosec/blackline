@@ -39,6 +39,15 @@ class TabCompleteTests(unittest.TestCase):
         self.assertIn(("httpx", "tool"), completion_items("install ht"))
         self.assertEqual(current_completion_length("install ht", "ht"), 2)
 
+    def test_install_completion_offers_all_and_named_groups(self):
+        self.assertIn(("all", "tool group"), completion_items("install a"))
+        self.assertIn(("recon", "tool group"), completion_items("install all r"))
+
+    def test_empty_install_completion_keeps_individual_tools_alongside_all(self):
+        items = completion_items("install ")
+        self.assertIn(("all", "tool group"), items)
+        self.assertIn(("httpx", "tool"), items)
+
     def test_help_completion_loads_topics_from_config(self):
         suggestions = complete_text("help rec")
 
