@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Sequence
 
 
@@ -28,6 +29,7 @@ def run_command(
     *,
     timeout: float | None = 30.0,
     input_text: str | None = None,
+    cwd: Path | str | None = None,
 ) -> CommandResult:
     """Run one command and capture stdout/stderr."""
     started = time.perf_counter()
@@ -39,6 +41,7 @@ def run_command(
             timeout=timeout,
             check=False,
             input=input_text,
+            cwd=cwd,
         )
     except subprocess.TimeoutExpired as exc:
         elapsed_seconds = time.perf_counter() - started
