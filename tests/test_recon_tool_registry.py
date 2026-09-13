@@ -9,7 +9,7 @@ import unittest
 from contextlib import redirect_stdout
 from unittest.mock import patch
 
-from blackline.cli.commands.recon.tool_registry_cmd import handle_recon_tools
+from blackline.cli.commands.system.tools_cmd import handle_tools
 from blackline.cli.commands.utils.shell_cmds import ShellState
 from blackline.cli.dispatcher import dispatch_command
 from blackline.core.recon.pipeline import build_recon_pipeline
@@ -32,11 +32,11 @@ class ReconToolRegistryTests(unittest.TestCase):
         self.assertEqual(smbclient.capability, "smb-share-enumeration")
         self.assertEqual(smbclient.produces, ("smb.share",))
 
-    def test_tools_listing_and_inspection_are_registry_backed(self):
+    def test_top_level_tools_listing_and_inspection_are_registry_backed(self):
         output = io.StringIO()
         with redirect_stdout(output):
-            self.assertTrue(handle_recon_tools("tools", use_color=False))
-            self.assertTrue(handle_recon_tools("tools show naabu", use_color=False))
+            self.assertTrue(handle_tools("recon", use_color=False))
+            self.assertTrue(handle_tools("naabu", use_color=False))
 
         text = output.getvalue()
         self.assertIn("RECON TOOLS", text)
@@ -44,6 +44,15 @@ class ReconToolRegistryTests(unittest.TestCase):
         self.assertIn("port-discovery", text)
         self.assertIn("NAABU", text)
         self.assertIn("produces", text)
+        self.assertIn("installed", text)
+
+    def test_tool_list_omits_install_locations_until_a_specific_tool_is_requested(self):
+        output = io.StringIO()
+        with redirect_stdout(output):
+            self.assertTrue(handle_tools("recon", use_color=False))
+
+        self.assertNotIn("LOCATION", output.getvalue())
+        self.assertNotIn("installed", output.getvalue().lower())
 
     def test_disable_changes_future_pipeline_selection(self):
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"BLACKLINE_DATA_DIR": directory}):
@@ -52,16 +61,16 @@ class ReconToolRegistryTests(unittest.TestCase):
             self.assertTrue(set_recon_tool_enabled("naabu", True))
             self.assertIn("naabu", [step.tool for step in build_recon_pipeline("10.0.0.1").steps])
 
-    def test_dispatcher_routes_recon_tools_without_starting_a_job(self):
-        with patch("blackline.cli.dispatcher.handle_recon_tools", return_value=True) as handler:
-            response = dispatch_command("recon tools check", ShellState())
+    def test_dispatcher_routes_top_level_tools_without_starting_a_job(self):
+        with patch("blackline.cli.dispatcher.handle_tools", return_value=True) as handler:
+            response = dispatch_command("tools naabu", ShellState())
 
         self.assertEqual(response.exit_code, 0)
-        handler.assert_called_once_with("tools check")
+        handler.assert_called_once_with("naabu")
 
     def test_completion_is_registry_backed(self):
-        self.assertIn(("show", "value"), completion_items("recon tools s"))
-        self.assertIn(("naabu", "tool"), completion_items("recon tools show na"))
+        self.assertIn(("recon", "tool group"), completion_items("tools r"))
+        self.assertIn(("naabu", "tool"), completion_items("tools na"))
 
     @patch("blackline.core.recon.tool_registry.which", return_value="/usr/local/bin/naabu")
     @patch("blackline.core.recon.tool_registry.run_command")
