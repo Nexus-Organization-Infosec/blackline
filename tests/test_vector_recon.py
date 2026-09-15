@@ -45,6 +45,53 @@ class VectorReconTests(unittest.TestCase):
         self.assertEqual([step.tool for step in followup.steps], ["httpx", "fingerprint"])
         self.assertEqual([step.params["port"] for step in followup.steps], ["3000", "3000"])
 
+    def test_unclassified_open_port_uses_httpx_protocol_discovery_without_a_scheme_hint(self):
+        vector = create_recon_vector(self.context)
+        unknown_service = StepResult(
+            tool="nmap",
+            action="port_scan",
+            ok=True,
+            payload={
+                "provider": "nmap",
+                "target": "10.0.0.174",
+                "ports": [{"port": 3000, "protocol": "tcp", "state": "open", "service": "unknown"}],
+            },
+        )
+
+        decision = vector.observe(observations_from_results((unknown_service,), fallback_host="10.0.0.174"))
+
+        self.assertEqual(
+            [(candidate.intent.verb, candidate.intent.subject, candidate.target) for candidate in decision.selected],
+            [("discover", "http_services", "10.0.0.174:3000")],
+        )
+        followup = execute_followup_plan(self.context, decision)
+        self.assertEqual([(step.tool, step.action) for step in followup.steps], [("httpx", "discover_http_services")])
+        self.assertNotIn("scheme", followup.steps[0].params)
+
+    def test_httpx_https_evidence_on_a_nonstandard_port_unlocks_tls_followups(self):
+        vector = create_recon_vector(self.context)
+        unknown_service = StepResult(
+            tool="nmap",
+            action="port_scan",
+            ok=True,
+            payload={"provider": "nmap", "target": "10.0.0.174", "ports": [{"port": 3000, "protocol": "tcp", "state": "open", "service": "unknown"}]},
+        )
+        first = vector.observe(observations_from_results((unknown_service,), fallback_host="10.0.0.174"))
+        for candidate in first.selected:
+            vector.mark_completed(candidate)
+        httpx_result = StepResult(
+            tool="httpx",
+            action="discover_http_services",
+            ok=True,
+            payload={"provider": "httpx", "findings": [{"url": "https://10.0.0.174:3000", "status_code": 200, "tls": {"protocol": "tls13"}}]},
+        )
+
+        later = vector.observe(observations_from_results((httpx_result,), fallback_host="10.0.0.174"))
+
+        selected = {(candidate.intent.verb, candidate.intent.subject, candidate.target) for candidate in later.selected}
+        self.assertIn(("fingerprint", "https", "10.0.0.174:3000"), selected)
+        self.assertIn(("inspect", "tls", "10.0.0.174:3000"), selected)
+
     def test_completed_actions_are_not_reintroduced_by_later_evidence(self):
         vector = create_recon_vector(self.context)
         first = vector.observe(observations_from_results((self.discovery,), fallback_host="10.0.0.174"))
