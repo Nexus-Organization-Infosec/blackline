@@ -1,6 +1,13 @@
 {
   "capabilities": [
     {
+      "verb": "discover",
+      "subject": "http_services",
+      "requires": [{"entity": "service", "value": "unknown", "state": "open"}],
+      "priority": 5,
+      "cost": 1
+    },
+    {
       "verb": "probe",
       "subject": "http",
       "requires": [{"entity": "service", "value": "http", "state": "open"}],
@@ -59,10 +66,10 @@
   ],
   "strategies": {
     "auto": {"max_actions_per_round": 3, "max_decision_rounds": 3, "cost_weight": 1},
-    "surface": {"max_actions_per_round": 1, "max_decision_rounds": 2, "cost_weight": 3, "allowed_actions": ["probe:http", "probe:https", "collect:network_intelligence_after_failure", "collect:network_intelligence_after_empty_scan"]},
-    "fast": {"max_actions_per_round": 1, "max_decision_rounds": 2, "cost_weight": 2, "allowed_actions": ["probe:http", "probe:https", "collect:network_intelligence_after_failure", "collect:network_intelligence_after_empty_scan"]},
+    "surface": {"max_actions_per_round": 1, "max_decision_rounds": 2, "cost_weight": 3, "allowed_actions": ["discover:http_services", "probe:http", "probe:https", "collect:network_intelligence_after_failure", "collect:network_intelligence_after_empty_scan"]},
+    "fast": {"max_actions_per_round": 1, "max_decision_rounds": 2, "cost_weight": 2, "allowed_actions": ["discover:http_services", "probe:http", "probe:https", "collect:network_intelligence_after_failure", "collect:network_intelligence_after_empty_scan"]},
     "balanced": {"max_actions_per_round": 3, "max_decision_rounds": 3, "cost_weight": 1},
-    "quiet": {"max_actions_per_round": 1, "max_decision_rounds": 2, "cost_weight": 4, "allowed_actions": ["probe:http", "probe:https", "collect:network_intelligence_after_failure", "collect:network_intelligence_after_empty_scan"]},
+    "quiet": {"max_actions_per_round": 1, "max_decision_rounds": 2, "cost_weight": 4, "allowed_actions": ["discover:http_services", "probe:http", "probe:https", "collect:network_intelligence_after_failure", "collect:network_intelligence_after_empty_scan"]},
     "deep": {"max_actions_per_round": 5, "max_decision_rounds": 5, "cost_weight": 0},
     "udp": {"max_actions_per_round": 1, "max_decision_rounds": 2, "cost_weight": 2, "allowed_actions": ["collect:network_intelligence_after_failure", "collect:network_intelligence_after_empty_scan"]}
   },
