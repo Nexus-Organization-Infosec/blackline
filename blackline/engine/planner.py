@@ -97,6 +97,21 @@ def build_followup_plan(context: ExecutionContext, candidates: tuple[Candidate, 
         if endpoint is None:
             continue
         host, port = endpoint
+        if intent.verb == "discover" and intent.subject == "http_services":
+            steps.append(
+                PlanStep(
+                    tool="httpx",
+                    action="discover_http_services",
+                    params={
+                        "target": context.params.get("target", ""),
+                        "host": host,
+                        "port": str(port),
+                        "target_type": target.target_type,
+                    },
+                    execution_group=0,
+                )
+            )
+            continue
         if intent.verb == "probe" and intent.subject in {"http", "https"}:
             steps.append(
                 PlanStep(
@@ -311,8 +326,11 @@ def _execution_group(step: ReconStep) -> int:
         return 1 if target_type == "ip" else 2
     if step.tool == "ipintel":
         return 0 if target_type == "ip" else 1
-    if step.tool in {"dns", "subfinder", "http", "httpx", "tls"}:
+    if step.tool in {"dns", "subfinder", "http", "tls"}:
         return 0
+    if step.tool == "httpx":
+        # Protocol discovery consumes the open endpoints produced by Naabu/Nmap.
+        return 3
     if step.tool == "naabu":
         return 0
     if step.tool == "sslyze":
