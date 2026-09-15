@@ -183,7 +183,7 @@ class EngineRunnerTests(unittest.TestCase):
         self.assertEqual(plan.steps[10].params["ports"], "")
         self.assertEqual(plan.steps[10].params["top_ports"], "5000")
         self.assertEqual(plan.steps[10].params["profile"], "balanced")
-        self.assertEqual([step.execution_group for step in plan.steps], [0, 0, 0, 1, 1, 0, 1, 2, 1, 0, 1])
+        self.assertEqual([step.execution_group for step in plan.steps], [0, 0, 3, 1, 1, 0, 1, 2, 1, 0, 1])
 
     def test_build_plan_uses_normalized_url_host_for_recon(self):
         plan = build_plan(
@@ -213,7 +213,7 @@ class EngineRunnerTests(unittest.TestCase):
         self.assertEqual(plan.steps[7].params["server_name"], "example.com")
         self.assertEqual(plan.steps[9].params["host"], "example.com")
         self.assertEqual(plan.steps[11].params["target"], "example.com")
-        self.assertEqual([step.execution_group for step in plan.steps], [0, 0, 1, 1, 1, 0, 1, 0, 1, 2, 0, 2])
+        self.assertEqual([step.execution_group for step in plan.steps], [0, 3, 1, 1, 1, 0, 1, 0, 1, 2, 0, 2])
         self.assertIsNotNone(plan.pipeline)
         self.assertEqual(
             [step.name for step in plan.pipeline.steps],
@@ -244,7 +244,7 @@ class EngineRunnerTests(unittest.TestCase):
         self.assertEqual(plan.steps[12].action, "fast_port_discovery")
         self.assertEqual(plan.steps[13].action, "port_scan")
         self.assertEqual(plan.steps[13].params["target"], "example.com")
-        self.assertEqual([step.execution_group for step in plan.steps], [0, 0, 1, 0, 0, 1, 1, 1, 0, 1, 2, 1, 0, 2])
+        self.assertEqual([step.execution_group for step in plan.steps], [0, 0, 1, 0, 3, 1, 1, 1, 0, 1, 2, 1, 0, 2])
 
     def test_build_plan_passes_through_scan_variety(self):
         plan = build_plan(
@@ -272,7 +272,7 @@ class EngineRunnerTests(unittest.TestCase):
         self.assertEqual(plan.steps[10].params["top_ports"], "20")
         self.assertEqual(plan.steps[10].params["timing"], "T4")
         self.assertEqual(plan.steps[10].params["service_detection"], "true")
-        self.assertEqual([step.execution_group for step in plan.steps], [0, 0, 0, 1, 1, 0, 1, 2, 1, 0, 1])
+        self.assertEqual([step.execution_group for step in plan.steps], [0, 0, 3, 1, 1, 0, 1, 2, 1, 0, 1])
 
     def test_execute_plan_returns_structured_results(self):
         plan = build_plan(
@@ -299,6 +299,15 @@ class EngineRunnerTests(unittest.TestCase):
 
         def fake_executor(args: tuple[str, ...]) -> CommandResult:
             calls["count"] += 1
+            if args[0] == "httpx":
+                self.assertIn("192.168.1.1:80", args)
+                return CommandResult(
+                    args=args,
+                    returncode=0,
+                    stdout='{"url":"http://192.168.1.1:80","status_code":200}\n',
+                    stderr="",
+                    elapsed_seconds=0.2,
+                )
             self.assertEqual(args[0], "nmap")
             return CommandResult(
                 args=args,
@@ -348,7 +357,7 @@ class EngineRunnerTests(unittest.TestCase):
         self.assertEqual(results[10].payload["filtered_ports"], 0)
         self.assertEqual(results[10].payload["interesting_ports"], 2)
         self.assertEqual(results[10].payload["elapsed_seconds"], 41.2)
-        self.assertEqual(calls["count"], 1)
+        self.assertEqual(calls["count"], 2)
 
     def test_execute_plan_parallelizes_independent_fast_ip_steps_but_keeps_result_order(self):
         plan = build_plan(
@@ -566,8 +575,8 @@ class EngineRunnerTests(unittest.TestCase):
         finally:
             execute_plan.__globals__["probe_http"] = original_probe_http
 
-        self.assertEqual(len(results), 5)
-        self.assertEqual([result.tool for result in results], ["ipintel", "http", "httpx", "tls", "naabu"])
+        self.assertEqual(len(results), 4)
+        self.assertEqual([result.tool for result in results], ["ipintel", "http", "tls", "naabu"])
         self.assertTrue(control.cancelled)
         self.assertEqual(control.cancellation_reason, "recon cancelled by user")
 
@@ -601,7 +610,7 @@ class EngineRunnerTests(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertTrue(result.cancelled)
         self.assertEqual(result.cancellation_reason, "recon cancelled by user")
-        self.assertEqual([step.tool for step in result.results], ["ipintel", "http", "httpx", "tls", "naabu"])
+        self.assertEqual([step.tool for step in result.results], ["ipintel", "http", "tls", "naabu"])
 
     def test_execute_plan_uses_configured_port_scan_timeout(self):
         plan = build_plan(
