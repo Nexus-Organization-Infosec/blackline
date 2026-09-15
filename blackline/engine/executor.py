@@ -16,7 +16,7 @@ from blackline.tools.dns.resolver import resolve_dns
 from blackline.tools.dns.subfinder import enumerate_subdomains
 from blackline.tools.http.client import probe_http
 from blackline.tools.http.fingerprint import fingerprint_http
-from blackline.tools.http.httpx import probe_httpx
+from blackline.tools.http.httpx import discover_http_services, probe_httpx
 from blackline.tools.http.katana import crawl_with_katana
 from blackline.tools.http.whatweb import fingerprint_with_whatweb
 from blackline.tools.network.nmap import NmapRequest, display_command, execute_nmap
@@ -261,16 +261,25 @@ def execute_step(
         )
 
     if step.tool == "httpx":
-        httpx_result = probe_httpx(
-            str(step.params.get("target", "")),
-            mode="http_ip_probe" if step.params.get("target_type") == "ip" else "http_probe",
-            host=str(step.params.get("host", "")),
-            scheme=str(step.params.get("scheme", "")),
-            path=str(step.params.get("path", "")),
-            port=str(step.params.get("port", "")),
-            timeout_seconds=timeout_seconds if timeout_seconds is not None else 10.0,
-            executor=command_executor,
-        )
+        runtime_state = runtime_state or {}
+        discovered_endpoints = _httpx_discovery_endpoints(runtime_state)
+        if step.action == "discover_http_services" or discovered_endpoints:
+            httpx_result = discover_http_services(
+                discovered_endpoints or (f"{step.params.get('host', '')}:{step.params.get('port', '')}",),
+                timeout_seconds=timeout_seconds if timeout_seconds is not None else 10.0,
+                executor=command_executor,
+            )
+        else:
+            httpx_result = probe_httpx(
+                str(step.params.get("target", "")),
+                mode="http_ip_probe" if step.params.get("target_type") == "ip" else "http_probe",
+                host=str(step.params.get("host", "")),
+                scheme=str(step.params.get("scheme", "")),
+                path=str(step.params.get("path", "")),
+                port=str(step.params.get("port", "")),
+                timeout_seconds=timeout_seconds if timeout_seconds is not None else 10.0,
+                executor=command_executor,
+            )
         payload = {
             "target": httpx_result.target,
             "provider": "httpx",
@@ -622,6 +631,43 @@ def _update_runtime_state(runtime_state: dict[str, object], result: StepResult) 
             runtime_state["naabu_open_ports"] = list(ports)
             runtime_state["naabu_completed"] = result.ok
             runtime_state["naabu_complete"] = bool(result.payload.get("complete", False))
+            _add_open_tcp_endpoints(runtime_state, ports, host=str(result.payload.get("target", "")))
+    if result.tool == "nmap":
+        ports = result.payload.get("ports", [])
+        if isinstance(ports, list):
+            _add_open_tcp_endpoints(runtime_state, ports, host=str(result.payload.get("target", "")))
+
+
+def _add_open_tcp_endpoints(runtime_state: dict[str, object], ports: list[object], *, host: str = "") -> None:
+    """Store open TCP endpoints for protocol discovery, without port heuristics."""
+    endpoints = runtime_state.setdefault("open_tcp_endpoints", [])
+    if not isinstance(endpoints, list):
+        return
+    host = host.strip()
+    for item in ports:
+        if not isinstance(item, dict) or str(item.get("state", "")).lower() != "open":
+            continue
+        if str(item.get("protocol", "tcp")).lower() != "tcp":
+            continue
+        candidate_host = str(item.get("host", "")).strip()
+        if candidate_host:
+            host = candidate_host
+        try:
+            port = int(item.get("port", 0))
+        except (TypeError, ValueError):
+            continue
+        if host and 1 <= port <= 65535:
+            endpoint = f"{host}:{port}"
+            if endpoint not in endpoints:
+                endpoints.append(endpoint)
+
+
+def _httpx_discovery_endpoints(runtime_state: dict[str, object]) -> tuple[str, ...]:
+    """Return previously discovered TCP endpoints in stable order."""
+    endpoints = runtime_state.get("open_tcp_endpoints", [])
+    if not isinstance(endpoints, list):
+        return ()
+    return tuple(sorted({str(endpoint).strip() for endpoint in endpoints if str(endpoint).strip()}))
 
 
 def _nmap_ports_from_naabu(value: object) -> str:
