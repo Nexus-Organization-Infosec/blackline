@@ -86,6 +86,53 @@ def probe_httpx(
     return HttpxResult(False, target, error=execution.stderr.strip() or "httpx probe failed", raw_output=execution.stdout, elapsed_seconds=elapsed)
 
 
+def discover_http_services(
+    endpoints: tuple[str, ...],
+    *,
+    timeout_seconds: float = 10.0,
+    executor: Callable[[tuple[str, ...]], CommandResult] | None = None,
+    config: dict | None = None,
+) -> HttpxResult:
+    """Identify HTTP or HTTPS on open endpoints without guessing from ports.
+
+    Endpoints are deliberately supplied as ``host:port`` values rather than
+    URLs. httpx performs protocol discovery and its returned URL is the
+    evidence for the actual scheme.
+    """
+    config = config or get_tool_config("httpx")
+    binary = str(config.get("binary") or "httpx")
+    normalized = tuple(dict.fromkeys(endpoint.strip() for endpoint in endpoints if endpoint.strip()))
+    target = ", ".join(normalized)
+    if executor is None and which(binary) is None:
+        return HttpxResult(False, target, skipped=True, error="httpx unavailable")
+    if not normalized:
+        return HttpxResult(True, target, negative_observation=True)
+
+    started = time.perf_counter()
+    command = build_httpx_command(list(normalized), binary=binary, config=config)
+    runner = executor or (lambda args: run_command(args, timeout=timeout_seconds))
+    execution = runner(command)
+    parsed = parse_httpx_jsonl(execution.stdout)
+    findings = tuple(
+        HttpxFinding(
+            url=str(item["url"]),
+            status_code=item["status_code"] if isinstance(item["status_code"], int) else None,
+            title=str(item["title"]),
+            redirect_to=str(item["redirect_to"]),
+            technologies=tuple(item["technologies"]),
+            webserver=str(item["webserver"]),
+            tls=dict(item["tls"]),
+        )
+        for item in parsed
+    )
+    elapsed = execution.elapsed_seconds or (time.perf_counter() - started)
+    if findings:
+        return HttpxResult(True, target, findings=findings, raw_output=execution.stdout, elapsed_seconds=elapsed)
+    if execution.returncode == 0:
+        return HttpxResult(True, target, negative_observation=True, raw_output=execution.stdout, elapsed_seconds=elapsed)
+    return HttpxResult(False, target, error=execution.stderr.strip() or "httpx probe failed", raw_output=execution.stdout, elapsed_seconds=elapsed)
+
+
 def build_httpx_command(urls: list[str], *, binary: str = "httpx", config: dict | None = None) -> tuple[str, ...]:
     """Build a JSONL httpx invocation without embedding tool policy in callers."""
     config = config or get_tool_config("httpx")
