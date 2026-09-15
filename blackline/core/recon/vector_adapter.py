@@ -135,6 +135,9 @@ def observations_from_results(results: Iterable[StepResult], *, fallback_host: s
                 if not isinstance(finding, dict):
                     continue
                 endpoint = str(finding.get("url", "") or fallback_host)
+                host, port, scheme = _httpx_endpoint(endpoint)
+                if host and port and scheme:
+                    observations.append(Observation.service(host=host, port=port, protocol=scheme, state="open", source=source, confidence=0.98))
                 observations.append(_tag("web", endpoint, "reachable", source, 0.95, (f"httpx:{result_index}:{finding_index}",)))
                 for technology in finding.get("technologies", ()):
                     value = str(technology).strip().lower()
@@ -228,15 +231,28 @@ def normalize_service_protocol(service: str, port: int) -> str:
     config = config if isinstance(config, dict) else {}
     value = service.strip().lower()
     https = {str(item).lower() for item in config.get("https_services", ())}
-    web_ports = {int(item) for item in config.get("web_default_ports", ()) if str(item).isdigit()}
     if value in https or (port == 443 and "http" in value):
         return "https"
     smb = {str(item).lower() for item in config.get("smb_services", ())}
     if value in smb or (port in {139, 445} and value in {"", "unknown"}):
         return "smb"
-    if "http" in value or (port in web_ports and value in {"", "unknown"}):
+    if "http" in value:
         return "http"
     return value or "unknown"
+
+
+def _httpx_endpoint(value: str) -> tuple[str, int, str]:
+    """Extract protocol evidence from the URL returned by httpx."""
+    from urllib.parse import urlsplit
+
+    parsed = urlsplit(value)
+    scheme = parsed.scheme.lower()
+    host = (parsed.hostname or "").strip()
+    try:
+        port = parsed.port or (443 if scheme == "https" else 80 if scheme == "http" else 0)
+    except ValueError:
+        return ("", 0, "")
+    return (host, port, scheme) if scheme in {"http", "https"} else ("", 0, "")
 
 
 def _requirements(raw: object) -> tuple[ConditionIntent, ...]:
