@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from blackline.tools.http.httpx import build_httpx_command, probe_httpx
+from blackline.tools.http.httpx import build_httpx_command, discover_http_services, probe_httpx
 from blackline.tools.parsers.httpx import parse_httpx_jsonl
 from blackline.utils.exec import CommandResult
 
@@ -54,6 +54,21 @@ class HttpxToolTests(unittest.TestCase):
 
         self.assertTrue(result.skipped)
         self.assertFalse(result.ok)
+
+    def test_discovery_passes_host_and_port_without_assuming_a_scheme(self):
+        seen: list[tuple[str, ...]] = []
+
+        def fake_executor(command: tuple[str, ...]) -> CommandResult:
+            seen.append(command)
+            return CommandResult(command, 0, '{"url":"https://10.0.0.174:3000","status_code":200,"tls":{"protocol":"tls13"}}\n', "", 0.1)
+
+        result = discover_http_services(("10.0.0.174:3000", "10.0.0.174:9000"), executor=fake_executor)
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.findings[0].url, "https://10.0.0.174:3000")
+        self.assertIn("10.0.0.174:3000", seen[0])
+        self.assertNotIn("http://10.0.0.174:3000", seen[0])
+        self.assertNotIn("https://10.0.0.174:3000", seen[0])
 
     def test_command_includes_configured_metadata_probes(self):
         command = build_httpx_command(
