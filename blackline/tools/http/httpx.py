@@ -55,8 +55,10 @@ def probe_httpx(
     """Confirm HTTP services and collect compact metadata using httpx JSONL."""
     config = config or get_tool_config("httpx")
     binary = str(config.get("binary") or "httpx")
-    if executor is None and which(binary) is None:
-        return HttpxResult(False, target, skipped=True, error="httpx unavailable")
+    if executor is None:
+        available, message = projectdiscovery_httpx_available(binary, config=config)
+        if not available:
+            return HttpxResult(False, target, skipped=True, error=message)
 
     urls = build_http_probe_urls(mode=mode, host=(host or target).strip(), scheme=scheme, path=path, port=port)
     if not urls:
@@ -103,8 +105,10 @@ def discover_http_services(
     binary = str(config.get("binary") or "httpx")
     normalized = tuple(dict.fromkeys(endpoint.strip() for endpoint in endpoints if endpoint.strip()))
     target = ", ".join(normalized)
-    if executor is None and which(binary) is None:
-        return HttpxResult(False, target, skipped=True, error="httpx unavailable")
+    if executor is None:
+        available, message = projectdiscovery_httpx_available(binary, config=config)
+        if not available:
+            return HttpxResult(False, target, skipped=True, error=message)
     if not normalized:
         return HttpxResult(True, target, negative_observation=True)
 
@@ -143,3 +147,29 @@ def build_httpx_command(urls: list[str], *, binary: str = "httpx", config: dict 
         command.extend(["-u", url])
     command.extend(flags)
     return tuple(command)
+
+
+def projectdiscovery_httpx_available(binary: str = "httpx", *, config: dict | None = None) -> tuple[bool, str]:
+    """Verify that ``httpx`` is ProjectDiscovery's scanner, not Python's CLI.
+
+    Both projects expose an ``httpx`` executable. The Python package accepts a
+    different command line and would otherwise be mistaken for the scanner.
+    """
+    if which(binary) is None:
+        return (False, "ProjectDiscovery httpx is unavailable; run install httpx")
+    version = run_command((binary, "-version"), timeout=3.0)
+    output = " ".join((version.stdout or version.stderr or "").lower().split())
+    markers = _identity_markers(config)
+    if version.ok and any(marker in output for marker in markers):
+        return (True, "")
+    return (
+        False,
+        "httpx on PATH is not the ProjectDiscovery scanner; install it with 'install httpx' or put the ProjectDiscovery binary first on PATH",
+    )
+
+
+def _identity_markers(config: dict | None) -> tuple[str, ...]:
+    config = config or get_tool_config("httpx")
+    configured = config.get("identity_markers", ()) if isinstance(config, dict) else ()
+    markers = tuple(str(marker).strip().lower() for marker in configured if str(marker).strip()) if isinstance(configured, list) else ()
+    return markers or ("current version", "httpx version", "projectdiscovery")
