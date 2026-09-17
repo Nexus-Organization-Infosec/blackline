@@ -8,6 +8,7 @@ import time
 from typing import Callable
 
 from blackline.config.tool_loader import get_tool_config
+from blackline.tools.external import configured_flags
 from blackline.tools.http.client import build_http_probe_urls
 from blackline.tools.parsers.httpx import parse_httpx_jsonl
 from blackline.utils.exec import CommandResult, run_command
@@ -63,29 +64,7 @@ def probe_httpx(
     urls = build_http_probe_urls(mode=mode, host=(host or target).strip(), scheme=scheme, path=path, port=port)
     if not urls:
         return HttpxResult(False, target, error="missing httpx target")
-    started = time.perf_counter()
-    command = build_httpx_command(urls, binary=binary, config=config)
-    runner = executor or (lambda args: run_command(args, timeout=timeout_seconds))
-    execution = runner(command)
-    parsed = parse_httpx_jsonl(execution.stdout)
-    findings = tuple(
-        HttpxFinding(
-            url=str(item["url"]),
-            status_code=item["status_code"] if isinstance(item["status_code"], int) else None,
-            title=str(item["title"]),
-            redirect_to=str(item["redirect_to"]),
-            technologies=tuple(item["technologies"]),
-            webserver=str(item["webserver"]),
-            tls=dict(item["tls"]),
-        )
-        for item in parsed
-    )
-    elapsed = execution.elapsed_seconds or (time.perf_counter() - started)
-    if findings:
-        return HttpxResult(True, target, findings=findings, raw_output=execution.stdout, elapsed_seconds=elapsed)
-    if execution.returncode == 0:
-        return HttpxResult(True, target, negative_observation=True, raw_output=execution.stdout, elapsed_seconds=elapsed)
-    return HttpxResult(False, target, error=execution.stderr.strip() or "httpx probe failed", raw_output=execution.stdout, elapsed_seconds=elapsed)
+    return _run_httpx(target, urls, binary=binary, timeout_seconds=timeout_seconds, executor=executor, config=config)
 
 
 def discover_http_services(
@@ -112,8 +91,21 @@ def discover_http_services(
     if not normalized:
         return HttpxResult(True, target, negative_observation=True)
 
+    return _run_httpx(target, list(normalized), binary=binary, timeout_seconds=timeout_seconds, executor=executor, config=config)
+
+
+def _run_httpx(
+    target: str,
+    inputs: list[str],
+    *,
+    binary: str,
+    timeout_seconds: float,
+    executor: Callable[[tuple[str, ...]], CommandResult] | None,
+    config: dict,
+) -> HttpxResult:
+    """Execute one httpx request and normalize its JSONL response."""
     started = time.perf_counter()
-    command = build_httpx_command(list(normalized), binary=binary, config=config)
+    command = build_httpx_command(inputs, binary=binary, config=config)
     runner = executor or (lambda args: run_command(args, timeout=timeout_seconds))
     execution = runner(command)
     parsed = parse_httpx_jsonl(execution.stdout)
@@ -140,12 +132,10 @@ def discover_http_services(
 def build_httpx_command(urls: list[str], *, binary: str = "httpx", config: dict | None = None) -> tuple[str, ...]:
     """Build a JSONL httpx invocation without embedding tool policy in callers."""
     config = config or get_tool_config("httpx")
-    flags = config.get("flags", [])
-    flags = [str(flag) for flag in flags] if isinstance(flags, list) else []
     command = [binary]
     for url in urls:
         command.extend(["-u", url])
-    command.extend(flags)
+    command.extend(configured_flags(config))
     return tuple(command)
 
 
