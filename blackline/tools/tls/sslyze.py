@@ -10,6 +10,7 @@ import time
 from typing import Callable
 
 from blackline.config.tool_loader import get_tool_config
+from blackline.tools.external import configured_flags, executable_is_available
 from blackline.tools.parsers.sslyze import parse_sslyze_json
 from blackline.utils.exec import CommandResult, run_command
 
@@ -50,7 +51,7 @@ def inspect_tls_configuration(
     binary = str(config.get("binary") or "sslyze")
     if not host:
         return SslyzeResult(False, host, port, error="missing SSLyze target")
-    if executor is None and which(binary) is None:
+    if not executable_is_available(binary, executor, executable_resolver=which):
         return SslyzeResult(False, host, port, skipped=True, error="sslyze unavailable")
     with NamedTemporaryFile(prefix="blackline-sslyze-", suffix=".json", delete=False) as handle:
         json_path = Path(handle.name)
@@ -78,6 +79,4 @@ def inspect_tls_configuration(
 def build_sslyze_command(host: str, *, port: int, json_path: Path, binary: str = "sslyze", config: dict | None = None) -> tuple[str, ...]:
     """Build a quiet SSLyze scan with machine-readable output."""
     config = config or get_tool_config("sslyze")
-    flags = config.get("flags", [])
-    flags = [str(flag) for flag in flags] if isinstance(flags, list) else []
-    return tuple([binary, *flags, f"--json_out={json_path}", f"{host}:{port}"])
+    return (binary, *configured_flags(config), f"--json_out={json_path}", f"{host}:{port}")
