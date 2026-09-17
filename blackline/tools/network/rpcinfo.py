@@ -8,6 +8,7 @@ import time
 from typing import Callable
 
 from blackline.config.tool_loader import get_tool_config
+from blackline.tools.external import configured_flags, executable_is_available
 from blackline.tools.parsers.rpcinfo import parse_rpcinfo_table
 from blackline.utils.exec import CommandResult, run_command
 
@@ -50,7 +51,7 @@ def query_rpcinfo(
     binary = str(config.get("binary") or "rpcinfo")
     if not target:
         return RpcInfoResult(False, target, error="missing rpcinfo target")
-    if executor is None and which(binary) is None:
+    if not executable_is_available(binary, executor, executable_resolver=which):
         return RpcInfoResult(False, target, skipped=True, error="rpcinfo unavailable")
     command = build_rpcinfo_command(target, binary=binary, config=config)
     started = time.perf_counter()
@@ -68,6 +69,4 @@ def query_rpcinfo(
 def build_rpcinfo_command(target: str, *, binary: str = "rpcinfo", config: dict | None = None) -> tuple[str, ...]:
     """Build the portable registered-program listing invocation."""
     config = config or get_tool_config("rpcinfo")
-    flags = config.get("flags", ["-p"])
-    flags = [str(flag) for flag in flags] if isinstance(flags, list) else ["-p"]
-    return tuple([binary, *flags, target])
+    return (binary, *configured_flags(config, default=("-p",)), target)
