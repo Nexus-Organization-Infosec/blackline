@@ -8,6 +8,7 @@ import time
 from typing import Callable
 
 from blackline.config.tool_loader import get_tool_config
+from blackline.tools.external import configured_flags, executable_is_available
 from blackline.tools.parsers.subfinder import parse_subfinder_jsonl
 from blackline.utils.exec import CommandResult, run_command
 
@@ -43,7 +44,7 @@ def enumerate_subdomains(
     binary = str(config.get("binary") or "subfinder")
     if not domain:
         return SubfinderResult(False, domain, error="missing subfinder domain")
-    if executor is None and which(binary) is None:
+    if not executable_is_available(binary, executor, executable_resolver=which):
         return SubfinderResult(False, domain, skipped=True, error="subfinder unavailable")
     command = build_subfinder_command(domain, binary=binary, config=config)
     started = time.perf_counter()
@@ -61,6 +62,4 @@ def enumerate_subdomains(
 def build_subfinder_command(domain: str, *, binary: str = "subfinder", config: dict | None = None) -> tuple[str, ...]:
     """Build a quiet passive Subfinder command with JSONL source attribution."""
     config = config or get_tool_config("subfinder")
-    flags = config.get("flags", [])
-    flags = [str(flag) for flag in flags] if isinstance(flags, list) else []
-    return tuple([binary, "-d", domain, *flags])
+    return (binary, "-d", domain, *configured_flags(config))
