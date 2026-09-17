@@ -10,6 +10,7 @@ import time
 from typing import Callable
 
 from blackline.config.tool_loader import get_tool_config
+from blackline.tools.external import configured_flags, executable_is_available
 from blackline.tools.http.client import build_http_probe_urls
 from blackline.tools.parsers.whatweb import parse_whatweb_json
 from blackline.utils.exec import CommandResult, run_command
@@ -56,7 +57,7 @@ def fingerprint_with_whatweb(
     """Run a low-aggression WhatWeb scan and retain its JSON evidence."""
     config = config or get_tool_config("whatweb")
     binary = str(config.get("binary") or "whatweb")
-    if executor is None and which(binary) is None:
+    if not executable_is_available(binary, executor, executable_resolver=which):
         return WhatWebResult(False, target, skipped=True, error="whatweb unavailable")
     urls = build_http_probe_urls(mode=mode, host=(host or target).strip(), scheme=scheme, path=path, port=port)
     if not urls:
@@ -105,6 +106,4 @@ def build_whatweb_command(
 ) -> tuple[str, ...]:
     """Build a low-noise WhatWeb request that logs structured results."""
     config = config or get_tool_config("whatweb")
-    flags = config.get("flags", [])
-    flags = [str(flag) for flag in flags] if isinstance(flags, list) else []
-    return tuple([binary, *flags, f"--log-json={log_path}", *urls])
+    return (binary, *configured_flags(config), f"--log-json={log_path}", *urls)
