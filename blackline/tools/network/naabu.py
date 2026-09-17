@@ -8,6 +8,7 @@ import time
 from typing import Callable
 
 from blackline.config.tool_loader import get_tool_config
+from blackline.tools.external import configured_flags, executable_is_available
 from blackline.tools.parsers.naabu import parse_naabu_jsonl
 from blackline.utils.exec import CommandResult, run_command
 
@@ -48,7 +49,7 @@ def scan_ports_with_naabu(
     target = target.strip()
     if not target:
         return NaabuResult(False, target, error="missing Naabu target")
-    if executor is None and which(binary) is None:
+    if not executable_is_available(binary, executor, executable_resolver=which):
         return NaabuResult(False, target, skipped=True, error="naabu unavailable")
     started = time.perf_counter()
     command = build_naabu_command(target, ports=ports, top_ports=top_ports, binary=binary, config=config)
@@ -85,8 +86,7 @@ def scan_ports_with_naabu(
 def build_naabu_command(target: str, *, ports: str = "", top_ports: str = "", binary: str = "naabu", config: dict | None = None) -> tuple[str, ...]:
     """Build Naabu JSONL discovery while preserving explicit port constraints."""
     config = config or get_tool_config("naabu")
-    flags = config.get("flags", [])
-    flags = [str(flag) for flag in flags] if isinstance(flags, list) else []
+    flags = configured_flags(config)
     command = [binary, "-host", target]
     if ports.strip():
         command.extend(["-p", "-" if ports.strip() == "all" else ports.strip()])
