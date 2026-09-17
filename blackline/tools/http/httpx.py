@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import os
+from pathlib import Path
 from shutil import which
 import time
 from typing import Callable
@@ -57,8 +59,8 @@ def probe_httpx(
     config = config or get_tool_config("httpx")
     binary = str(config.get("binary") or "httpx")
     if executor is None:
-        available, message = projectdiscovery_httpx_available(binary, config=config)
-        if not available:
+        binary, message = resolve_projectdiscovery_httpx(binary, config=config)
+        if not binary:
             return HttpxResult(False, target, skipped=True, error=message)
 
     urls = build_http_probe_urls(mode=mode, host=(host or target).strip(), scheme=scheme, path=path, port=port)
@@ -85,8 +87,8 @@ def discover_http_services(
     normalized = tuple(dict.fromkeys(endpoint.strip() for endpoint in endpoints if endpoint.strip()))
     target = ", ".join(normalized)
     if executor is None:
-        available, message = projectdiscovery_httpx_available(binary, config=config)
-        if not available:
+        binary, message = resolve_projectdiscovery_httpx(binary, config=config)
+        if not binary:
             return HttpxResult(False, target, skipped=True, error=message)
     if not normalized:
         return HttpxResult(True, target, negative_observation=True)
@@ -145,17 +147,40 @@ def projectdiscovery_httpx_available(binary: str = "httpx", *, config: dict | No
     Both projects expose an ``httpx`` executable. The Python package accepts a
     different command line and would otherwise be mistaken for the scanner.
     """
-    if which(binary) is None:
-        return (False, "ProjectDiscovery httpx is unavailable; run install httpx")
-    version = run_command((binary, "-version"), timeout=3.0)
-    output = " ".join((version.stdout or version.stderr or "").lower().split())
+    resolved, message = resolve_projectdiscovery_httpx(binary, config=config)
+    return (bool(resolved), message)
+
+
+def resolve_projectdiscovery_httpx(binary: str = "httpx", *, config: dict | None = None) -> tuple[str, str]:
+    """Return a verified ProjectDiscovery binary even when Python's httpx wins PATH."""
+    candidates = _httpx_candidates(binary)
+    if not candidates:
+        return ("", "ProjectDiscovery httpx is unavailable; run install httpx")
     markers = _identity_markers(config)
-    if version.ok and any(marker in output for marker in markers):
-        return (True, "")
+    for candidate in candidates:
+        version = run_command((candidate, "-version"), timeout=3.0)
+        output = " ".join((version.stdout or version.stderr or "").lower().split())
+        if version.ok and any(marker in output for marker in markers):
+            return (candidate, "")
     return (
-        False,
-        "httpx on PATH is not the ProjectDiscovery scanner; install it with 'install httpx' or put the ProjectDiscovery binary first on PATH",
+        "",
+        "httpx was found, but it is not the ProjectDiscovery scanner; run 'install httpx' or add the correct binary to PATH",
     )
+
+
+def _httpx_candidates(binary: str) -> tuple[str, ...]:
+    """Return executable candidates in PATH order, keeping an explicit path intact."""
+    explicit = Path(binary).expanduser()
+    if explicit.parent != Path("."):
+        return (str(explicit),) if explicit.is_file() else ()
+
+    first = which(binary)
+    candidates: list[str] = [first] if first else []
+    for directory in os.get_exec_path():
+        candidate = Path(directory) / binary
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            candidates.append(str(candidate))
+    return tuple(dict.fromkeys(candidates))
 
 
 def _identity_markers(config: dict | None) -> tuple[str, ...]:
