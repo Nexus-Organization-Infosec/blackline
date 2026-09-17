@@ -9,6 +9,7 @@ from typing import Callable
 from urllib.parse import urlsplit, urlunsplit
 
 from blackline.config.tool_loader import get_tool_config
+from blackline.tools.external import configured_flags, executable_is_available
 from blackline.tools.parsers.katana import parse_katana_jsonl
 from blackline.utils.exec import CommandResult, run_command
 
@@ -53,7 +54,7 @@ def crawl_with_katana(
     """Crawl one explicit web target using bounded, JSONL Katana output."""
     config = config or get_tool_config("katana")
     binary = str(config.get("binary") or "katana")
-    if executor is None and which(binary) is None:
+    if not executable_is_available(binary, executor, executable_resolver=which):
         return KatanaResult(False, target, skipped=True, error="katana unavailable")
     crawl_url = build_katana_target(target, host=host, scheme=scheme, path=path, port=port)
     if not crawl_url:
@@ -89,6 +90,4 @@ def build_katana_target(target: str, *, host: str = "", scheme: str = "", path: 
 def build_katana_command(crawl_url: str, *, binary: str = "katana", config: dict | None = None) -> tuple[str, ...]:
     """Build a bounded JSONL crawl invocation from tool configuration."""
     config = config or get_tool_config("katana")
-    flags = config.get("flags", [])
-    flags = [str(flag) for flag in flags] if isinstance(flags, list) else []
-    return tuple([binary, "-u", crawl_url, *flags])
+    return (binary, "-u", crawl_url, *configured_flags(config))
