@@ -8,6 +8,7 @@ import time
 from typing import Callable
 
 from blackline.config.tool_loader import get_tool_config
+from blackline.tools.external import configured_flags, executable_is_available
 from blackline.tools.parsers.smbclient import parse_smbclient_grepable
 from blackline.utils.exec import CommandResult, run_command
 
@@ -53,7 +54,7 @@ def enumerate_smb_shares(
         return SmbClientResult(False, target, port, error="missing SMB target")
     if not 1 <= port <= 65535:
         return SmbClientResult(False, target, port, error="invalid SMB port")
-    if executor is None and which(binary) is None:
+    if not executable_is_available(binary, executor, executable_resolver=which):
         return SmbClientResult(False, target, port, skipped=True, error="smbclient unavailable")
     command = build_smbclient_command(target, port=port, binary=binary, config=config)
     started = time.perf_counter()
@@ -85,6 +86,4 @@ def build_smbclient_command(
 ) -> tuple[str, ...]:
     """Build an anonymous, grepable SMB listing command."""
     config = config or get_tool_config("smbclient")
-    flags = config.get("flags", ["-N", "-g"])
-    flags = [str(flag) for flag in flags] if isinstance(flags, list) else ["-N", "-g"]
-    return tuple([binary, "-L", f"//{target}", "-p", str(port), *flags])
+    return (binary, "-L", f"//{target}", "-p", str(port), *configured_flags(config, default=("-N", "-g")))
