@@ -50,13 +50,13 @@ class SubfinderToolTests(unittest.TestCase):
         self.assertEqual(result.subdomains[0].host, "api.example.com")
         self.assertEqual(result.subdomains[0].sources, ("crtsh",))
 
-    @patch("blackline.tools.dns.subfinder.which", return_value=None)
-    def test_missing_binary_is_a_graceful_skip(self, _which):
+    @patch("blackline.tools.dns.subfinder.resolve_external_binary", return_value=("", "subfinder is unavailable"))
+    def test_missing_binary_is_a_graceful_skip(self, _resolver):
         result = enumerate_subdomains("example.com")
 
         self.assertTrue(result.skipped)
         self.assertFalse(result.ok)
-        self.assertEqual(result.error, "subfinder unavailable")
+        self.assertEqual(result.error, "subfinder is unavailable")
 
 
 if __name__ == "__main__":
