@@ -128,8 +128,8 @@ class NaabuToolTests(unittest.TestCase):
         self.assertEqual(results[1].outcome, "negative")
         self.assertEqual(len(commands), 2)
 
-    @patch("blackline.tools.network.naabu.which", return_value=None)
-    def test_missing_binary_is_a_graceful_skip(self, _which):
+    @patch("blackline.tools.network.naabu.resolve_external_binary", return_value=("", "naabu is unavailable"))
+    def test_missing_binary_is_a_graceful_skip(self, _resolver):
         result = scan_ports_with_naabu("example.com", config={"binary": "naabu"})
 
         self.assertTrue(result.skipped)
