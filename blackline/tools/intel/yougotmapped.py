@@ -7,10 +7,10 @@ import ipaddress
 import json
 import tempfile
 from pathlib import Path
-from shutil import which
 from typing import Callable
 
 from blackline.config.tool_loader import get_tool_config
+from blackline.pathfinder import require_tool
 from blackline.tools.parsers.yougotmapped import (
     YouGotMappedParsedResult,
     parse_yougotmapped_json_file,
@@ -197,8 +197,10 @@ def build_yougotmapped_command(
 def _run_yougotmapped(target: str, *, deep: bool, timeout_seconds: float | None) -> YouGotMappedParsedResult | None:
     config = get_tool_config("yougotmapped")
     binary = str(config.get("binary") or "yougotmapped")
-    if which(binary) is None:
+    resolution = require_tool("yougotmapped", executable=binary)
+    if not resolution.valid:
         return None
+    config = {**config, "binary": resolution.path}
 
     with tempfile.TemporaryDirectory(prefix="blackline-ygm-") as directory:
         output_path = Path(directory) / "yougotmapped.json"
