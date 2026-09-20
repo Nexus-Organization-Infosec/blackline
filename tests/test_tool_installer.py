@@ -7,12 +7,15 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from blackline.cli.commands.utils.tool_install_cmd import handle_install
+from blackline.cli.commands.utils.tool_uninstall_cmd import handle_uninstall
 from blackline.tools.installer import (
     install_tool,
     installation_plans,
     installable_tool_names,
     source_build_plans,
     tools_for_install_group,
+    uninstall_tool,
+    uninstallation_plans,
 )
 from blackline.utils.exec import CommandResult
 
@@ -184,6 +187,59 @@ class ToolInstallerTests(unittest.TestCase):
         self.assertEqual(events[0][0], "brew")
         self.assertEqual(events[1][0], "git")
 
+    def test_uninstall_uses_the_inverse_of_a_configured_package_route(self):
+        plans = uninstallation_plans(
+            "sample",
+            platform_name="Darwin",
+            config=CONFIG,
+            executable_resolver=lambda name: "/usr/local/bin/brew" if name == "brew" else None,
+        )
+
+        self.assertEqual(plans[0].command, ("brew", "uninstall", "sample"))
+
+    def test_uninstall_removes_only_blackline_managed_source_artifacts(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_dir = root / "sources" / "source-sample"
+            source_dir.mkdir(parents=True)
+            (source_dir / "README.md").write_text("managed", encoding="utf-8")
+            binary = root / "bin" / "source-sample"
+            binary.parent.mkdir()
+            binary.write_text("managed", encoding="utf-8")
+
+            outcome = uninstall_tool(
+                "source-sample",
+                platform_name="Darwin",
+                config=SOURCE_CONFIG,
+                executable_resolver=lambda _name: None,
+                source_root=root / "sources",
+                install_dir=root / "bin",
+            )
+
+            self.assertTrue(outcome.removed)
+            self.assertFalse(source_dir.exists())
+            self.assertFalse(binary.exists())
+
+    def test_uninstall_does_not_guess_at_go_workspace_binaries(self):
+        config = {
+            "tools": {
+                "go-tool": {
+                    "binary": "go-tool",
+                    "platforms": {"Darwin": [{"manager": "Go", "manager_binary": "go", "command": ["go", "install", "example/go-tool@latest"]}]},
+                }
+            }
+        }
+
+        outcome = uninstall_tool(
+            "go-tool",
+            platform_name="Darwin",
+            config=config,
+            executable_resolver=lambda name: "/usr/local/bin/go" if name == "go" else None,
+        )
+
+        self.assertFalse(outcome.removed)
+        self.assertIn("Go-managed binaries", outcome.message)
+
     def test_install_all_continues_after_one_tool_fails(self):
         success = type("Outcome", (), {"installed": True, "message": "installed"})()
         failure = type("Outcome", (), {"installed": False, "message": "missing dependency"})()
@@ -198,6 +254,21 @@ class ToolInstallerTests(unittest.TestCase):
         self.assertEqual(install.call_args_list[0].args, ("httpx",))
         self.assertEqual(install.call_args_list[1].args, ("naabu",))
         self.assertIn("1/2 tools installed", output.getvalue())
+
+    def test_uninstall_all_continues_after_one_tool_fails(self):
+        success = type("Outcome", (), {"removed": True, "message": "removed"})()
+        failure = type("Outcome", (), {"removed": False, "message": "not installed"})()
+        output = io.StringIO()
+        with patch("blackline.cli.commands.utils.tool_uninstall_cmd.installable_tool_names", return_value=("httpx", "naabu")), patch(
+            "blackline.cli.commands.utils.tool_uninstall_cmd.uninstall_tool", side_effect=(success, failure)
+        ) as uninstall:
+            with redirect_stdout(output):
+                completed = handle_uninstall("all", use_color=False)
+
+        self.assertFalse(completed)
+        self.assertEqual(uninstall.call_args_list[0].args, ("httpx",))
+        self.assertEqual(uninstall.call_args_list[1].args, ("naabu",))
+        self.assertIn("1/2 tools uninstalled", output.getvalue())
 
 
 if __name__ == "__main__":
