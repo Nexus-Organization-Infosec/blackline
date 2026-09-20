@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from shutil import which
 import time
 from typing import Callable
 from urllib.parse import urlsplit, urlunsplit
 
 from blackline.config.tool_loader import get_tool_config
-from blackline.tools.external import configured_flags, executable_is_available
+from blackline.tools.external import configured_flags, resolve_external_binary
 from blackline.tools.parsers.katana import parse_katana_jsonl
 from blackline.utils.exec import CommandResult, run_command
 
@@ -54,8 +53,9 @@ def crawl_with_katana(
     """Crawl one explicit web target using bounded, JSONL Katana output."""
     config = config or get_tool_config("katana")
     binary = str(config.get("binary") or "katana")
-    if not executable_is_available(binary, executor, executable_resolver=which):
-        return KatanaResult(False, target, skipped=True, error="katana unavailable")
+    binary, message = resolve_external_binary("katana", binary, executor)
+    if not binary:
+        return KatanaResult(False, target, skipped=True, error=message)
     crawl_url = build_katana_target(target, host=host, scheme=scheme, path=path, port=port)
     if not crawl_url:
         return KatanaResult(False, target, error="missing Katana target")
