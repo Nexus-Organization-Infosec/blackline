@@ -1,5 +1,7 @@
 import unittest
+from unittest.mock import patch
 from blackline.config.tool_loader import clear_tool_config_cache, get_tool_config
+from blackline.pathfinder import ToolResolution
 from blackline.tools.network.nmap import NmapRequest, build_nmap_command, display_command, execute_nmap
 from blackline.tools.parsers.nmap import NmapParsedResult, parse_nmap_output
 from blackline.utils.exec import CommandResult, run_command
@@ -108,17 +110,14 @@ class NmapToolTests(unittest.TestCase):
         )
 
     def test_execute_nmap_without_binary_returns_error(self):
-        from blackline.tools.network import nmap as nmap_module
-
-        original_which = nmap_module.which
-        nmap_module.which = lambda _: None
-        try:
+        with patch(
+            "blackline.tools.network.nmap.require_tool",
+            return_value=ToolResolution("nmap", detail="nmap is unavailable"),
+        ):
             execution = execute_nmap(NmapRequest(target="example.com"))
-        finally:
-            nmap_module.which = original_which
 
         self.assertFalse(execution.ok)
-        self.assertEqual(execution.error, "nmap binary not found")
+        self.assertEqual(execution.error, "nmap is unavailable")
         self.assertEqual(execution.parsed, NmapParsedResult(target="example.com"))
 
     def test_execute_nmap_timeout_surfaces_detail(self):
