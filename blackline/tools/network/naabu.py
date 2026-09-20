@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from shutil import which
 import time
 from typing import Callable
 
 from blackline.config.tool_loader import get_tool_config
-from blackline.tools.external import configured_flags, executable_is_available
+from blackline.tools.external import configured_flags, resolve_external_binary
 from blackline.tools.parsers.naabu import parse_naabu_jsonl
 from blackline.utils.exec import CommandResult, run_command
 
@@ -49,8 +48,9 @@ def scan_ports_with_naabu(
     target = target.strip()
     if not target:
         return NaabuResult(False, target, error="missing Naabu target")
-    if not executable_is_available(binary, executor, executable_resolver=which):
-        return NaabuResult(False, target, skipped=True, error="naabu unavailable")
+    binary, message = resolve_external_binary("naabu", binary, executor)
+    if not binary:
+        return NaabuResult(False, target, skipped=True, error=message)
     started = time.perf_counter()
     command = build_naabu_command(target, ports=ports, top_ports=top_ports, binary=binary, config=config)
     runner = executor or (lambda args: run_command(args, timeout=timeout_seconds))
