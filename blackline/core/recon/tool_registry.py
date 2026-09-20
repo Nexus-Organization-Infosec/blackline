@@ -6,10 +6,9 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
-from shutil import which
 
 from blackline.config.tool_loader import get_recon_tool_registry_config
-from blackline.utils.exec import run_command
+from blackline.pathfinder import Pathfinder
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +19,7 @@ class ReconTool:
     capability: str
     backend: str
     binary: str = ""
+    provider: str = ""
     produces: tuple[str, ...] = ()
     consumes: tuple[str, ...] = ()
     strategies: tuple[str, ...] = ()
@@ -35,6 +35,7 @@ class ReconToolCheck:
     status: str
     version: str = ""
     detail: str = ""
+    path: str = ""
 
 
 def recon_tools() -> tuple[ReconTool, ...]:
@@ -57,6 +58,7 @@ def recon_tools() -> tuple[ReconTool, ...]:
                 capability=capability,
                 backend=backend,
                 binary=str(raw.get("binary", "")).strip(),
+                provider=str(raw.get("provider", "")).strip(),
                 produces=_words(raw.get("produces")),
                 consumes=_words(raw.get("consumes")),
                 strategies=_words(raw.get("strategies")),
@@ -86,7 +88,7 @@ def recon_tool_status(tool: ReconTool) -> str:
     """Return disabled, unavailable, or ready without executing a backend."""
     if not is_recon_tool_enabled(tool.name):
         return "disabled"
-    if tool.backend == "external" and (not tool.binary or which(tool.binary) is None):
+    if tool.backend == "external" and (not tool.binary or not Pathfinder().locate(tool.name, executable=tool.binary).found):
         return "unavailable"
     return "ready"
 
@@ -98,14 +100,11 @@ def check_recon_tool(tool: ReconTool, *, timeout_seconds: float = 3.0) -> ReconT
         return ReconToolCheck(tool, status, detail=status)
     if tool.backend != "external":
         return ReconToolCheck(tool, "ready", version="built in", detail=f"{tool.backend} backend")
-    if not tool.check_args:
-        return ReconToolCheck(tool, "ready", version="available", detail="binary found")
-    completed = run_command((tool.binary, *tool.check_args), timeout=timeout_seconds)
-    output = (completed.stdout or completed.stderr or "").strip()
-    version = next((line.strip() for line in output.splitlines() if line.strip()), "unknown")
-    if completed.returncode not in tool.check_success_codes:
-        return ReconToolCheck(tool, "unhealthy", version=version, detail=f"version probe exited {completed.returncode}")
-    return ReconToolCheck(tool, "ready", version=version[:120], detail="version probe succeeded")
+    resolution = Pathfinder().require(tool.name, executable=tool.binary, timeout_seconds=timeout_seconds)
+    if not resolution.valid:
+        status = "unavailable" if not resolution.found else "unhealthy"
+        return ReconToolCheck(tool, status, version=resolution.version, detail=resolution.detail, path=resolution.path)
+    return ReconToolCheck(tool, "ready", version=resolution.version, detail=resolution.detail, path=resolution.path)
 
 
 def check_recon_tools(*, timeout_seconds: float = 3.0) -> tuple[ReconToolCheck, ...]:
