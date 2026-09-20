@@ -45,8 +45,8 @@ class KatanaToolTests(unittest.TestCase):
     def test_domain_target_gets_a_conventional_https_url(self):
         self.assertEqual(build_katana_target("example.com", host="example.com"), "https://example.com/")
 
-    @patch("blackline.tools.http.katana.which", return_value=None)
-    def test_missing_binary_is_a_skipped_optional_observation(self, _which):
+    @patch("blackline.tools.http.katana.resolve_external_binary", return_value=("", "katana is unavailable"))
+    def test_missing_binary_is_a_skipped_optional_observation(self, _resolver):
         result = crawl_with_katana("example.com", config={"binary": "katana"})
 
         self.assertTrue(result.skipped)
