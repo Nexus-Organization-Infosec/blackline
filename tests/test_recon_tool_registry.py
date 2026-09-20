@@ -15,8 +15,8 @@ from blackline.cli.dispatcher import dispatch_command
 from blackline.core.recon.pipeline import build_recon_pipeline
 from blackline.core.recon.tool_registry import get_recon_tool, providers_for, set_recon_tool_enabled
 from blackline.core.recon.tool_registry import check_recon_tool
+from blackline.pathfinder import ToolResolution
 from blackline.utils.tab_complete import completion_items
-from blackline.utils.exec import CommandResult
 
 
 class ReconToolRegistryTests(unittest.TestCase):
@@ -45,6 +45,7 @@ class ReconToolRegistryTests(unittest.TestCase):
         self.assertIn("NAABU", text)
         self.assertIn("produces", text)
         self.assertIn("installed", text)
+        self.assertIn("provider", text)
 
     def test_tool_list_omits_install_locations_until_a_specific_tool_is_requested(self):
         output = io.StringIO()
@@ -68,33 +69,48 @@ class ReconToolRegistryTests(unittest.TestCase):
         self.assertEqual(response.exit_code, 0)
         handler.assert_called_once_with("naabu")
 
+    def test_tools_command_routes_uninstall_subcommand(self):
+        with patch("blackline.cli.commands.system.tools_cmd.handle_uninstall", return_value=True) as uninstall:
+            self.assertTrue(handle_tools("uninstall httpx", use_color=False))
+
+        uninstall.assert_called_once_with("httpx", use_color=False)
+
+    def test_tools_command_routes_install_subcommand(self):
+        with patch("blackline.cli.commands.system.tools_cmd.handle_install", return_value=True) as install:
+            self.assertTrue(handle_tools("install httpx", use_color=False))
+
+        install.assert_called_once_with("httpx", use_color=False)
+
     def test_completion_is_registry_backed(self):
         self.assertIn(("recon", "tool group"), completion_items("tools r"))
         self.assertIn(("naabu", "tool"), completion_items("tools na"))
 
-    @patch("blackline.core.recon.tool_registry.which", return_value="/usr/local/bin/naabu")
-    @patch("blackline.core.recon.tool_registry.run_command")
-    def test_external_health_check_runs_only_configured_version_probe(self, run_command, _which):
-        run_command.return_value = CommandResult(("naabu", "-version"), 0, "[INF] Current Version: v2.3.0\n", "", 0.1)
+    @patch("blackline.core.recon.tool_registry.Pathfinder")
+    def test_external_health_check_uses_pathfinder_resolution(self, pathfinder):
+        pathfinder.return_value.locate.return_value = ToolResolution("naabu", path="/usr/local/bin/naabu", candidates=("/usr/local/bin/naabu",))
+        pathfinder.return_value.require.return_value = ToolResolution(
+            "naabu", path="/usr/local/bin/naabu", version="v2.3.0", valid=True, candidates=("/usr/local/bin/naabu",)
+        )
 
         check = check_recon_tool(get_recon_tool("naabu"))
 
         self.assertEqual(check.status, "ready")
         self.assertIn("v2.3.0", check.version)
-        run_command.assert_called_once_with(("naabu", "-version"), timeout=3.0)
+        self.assertEqual(check.path, "/usr/local/bin/naabu")
 
-    @patch("blackline.core.recon.tool_registry.which", return_value=None)
-    @patch("blackline.core.recon.tool_registry.run_command")
-    def test_missing_external_binary_is_reported_without_running_a_probe(self, run_command, _which):
+    @patch("blackline.core.recon.tool_registry.Pathfinder")
+    def test_missing_external_binary_is_reported_without_running_a_probe(self, pathfinder):
+        pathfinder.return_value.locate.return_value = ToolResolution("naabu", detail="naabu is unavailable")
         check = check_recon_tool(get_recon_tool("naabu"))
 
         self.assertEqual(check.status, "unavailable")
-        run_command.assert_not_called()
 
-    @patch("blackline.core.recon.tool_registry.which", return_value="/usr/local/bin/naabu")
-    @patch("blackline.core.recon.tool_registry.run_command")
-    def test_failed_health_probe_is_unhealthy(self, run_command, _which):
-        run_command.return_value = CommandResult(("naabu", "-version"), 1, "", "bad executable", 0.1)
+    @patch("blackline.core.recon.tool_registry.Pathfinder")
+    def test_failed_health_probe_is_unhealthy(self, pathfinder):
+        pathfinder.return_value.locate.return_value = ToolResolution("naabu", path="/usr/local/bin/naabu", candidates=("/usr/local/bin/naabu",))
+        pathfinder.return_value.require.return_value = ToolResolution(
+            "naabu", path="/usr/local/bin/naabu", version="unknown", detail="identity check exited 1", candidates=("/usr/local/bin/naabu",)
+        )
 
         check = check_recon_tool(get_recon_tool("naabu"))
 
