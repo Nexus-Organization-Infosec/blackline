@@ -41,7 +41,7 @@ class SslyzeToolTests(unittest.TestCase):
         self.assertEqual(result.scans[0].protocols, ("TLS 1.2", "TLS 1.3"))
 
     def test_missing_binary_skips_safely(self):
-        with patch("blackline.tools.tls.sslyze.which", return_value=None):
+        with patch("blackline.tools.tls.sslyze.resolve_external_binary", return_value=("", "sslyze is unavailable")):
             result = inspect_tls_configuration("example.com", config={"binary": "sslyze"})
         self.assertTrue(result.skipped)
 
