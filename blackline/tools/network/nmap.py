@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
+from pathlib import Path
 from shutil import which
 from typing import Callable
 
 from blackline.config.tool_loader import get_tool_config
+from blackline.pathfinder import require_tool
 from blackline.tools.parsers.nmap import NmapParsedResult, parse_nmap_output
 from blackline.utils.exec import CommandResult, run_command
 
@@ -101,6 +103,17 @@ def execute_nmap(
     config = config or get_tool_config("nmap")
     defaults = _mapping(config.get("defaults"))
     timeout_seconds = timeout_seconds if timeout_seconds is not None else _optional_timeout(defaults.get("timeout_seconds"))
+    if executor is None:
+        resolution = require_tool("nmap", executable=str(config.get("binary") or "nmap"))
+        if not resolution.valid:
+            command = build_nmap_command(request, config=config)
+            return NmapExecution(
+                ok=False,
+                command=command,
+                parsed=NmapParsedResult(target=request.target),
+                error=resolution.detail,
+            )
+        config = {**config, "binary": resolution.path}
     command = build_nmap_command(request, config=config)
     execution_command, used_sudo = _execution_command(command, config=config)
     if executor is None and _missing_required_binary(execution_command):
@@ -238,12 +251,12 @@ def _missing_required_binary(command: tuple[str, ...]) -> bool:
         return True
 
     binary = command[0]
-    if which(binary) is None:
+    if not _binary_is_available(binary):
         return True
 
     if binary == "sudo":
         wrapped_binary = _wrapped_binary(command)
-        if not wrapped_binary or which(wrapped_binary) is None:
+        if not wrapped_binary or not _binary_is_available(wrapped_binary):
             return True
     return False
 
@@ -256,6 +269,13 @@ def _missing_binary_message(command: tuple[str, ...]) -> str:
     if which("sudo") is None:
         return "sudo binary not found"
     return "nmap binary not found"
+
+
+def _binary_is_available(binary: str) -> bool:
+    path = Path(binary).expanduser()
+    if path.parent != Path("."):
+        return path.is_file() and os.access(path, os.X_OK)
+    return which(binary) is not None
 
 
 def _wrapped_binary(command: tuple[str, ...]) -> str:
