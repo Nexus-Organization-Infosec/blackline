@@ -45,15 +45,6 @@
           "examples": ["load ./web-audit.bline", "load web-audit"]
         },
         {
-          "name": "install",
-          "kind": "command",
-          "description": "install optional external tools",
-          "usage": "install <tool> | install all [group]",
-          "long_description": "Install one configured tool, every configured tool, or a named group. Each tool uses the first supported package manager and can fall back to a declared source clone-and-build recipe. Installation runs only after this explicit command.",
-          "arguments": [["tool", "configured tool name, such as httpx"]],
-          "examples": ["install httpx", "install all recon", "install all"]
-        },
-        {
           "name": "list",
           "kind": "command",
           "description": "list registered templates",
@@ -213,10 +204,10 @@
           "name": "tools",
           "kind": "command",
           "description": "list configured tools and their installation status",
-          "usage": "tools [recon|<tool>]",
-          "long_description": "List every configured tool, restrict the list to reconnaissance providers, or inspect one tool's location, version, capability, supported platforms, and install routes.",
-          "arguments": [["recon", "show only reconnaissance providers"], ["tool", "show details for one tool"]],
-          "examples": ["tools", "tools recon", "tools httpx"]
+          "usage": "tools [recon|<tool>|install <tool|all>|uninstall <tool|all>]",
+          "long_description": "List every configured tool, restrict the list to reconnaissance providers, inspect one tool's location and install routes, install an optional tool, or remove one through its configured package manager.",
+          "arguments": [["recon", "show only reconnaissance providers"], ["tool", "show details for one tool"], ["install", "install one optional tool or all optional tools"], ["uninstall", "remove one optional tool or all optional tools"]],
+          "examples": ["tools", "tools recon", "tools httpx", "tools install httpx", "tools install all", "tools uninstall httpx", "tools uninstall all"]
         },
         {
           "name": "find_exploit",
