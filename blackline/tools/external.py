@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from shutil import which
 from typing import Callable
 
+from blackline.pathfinder import require_tool
 from blackline.utils.exec import CommandResult
 
 CommandExecutor = Callable[[tuple[str, ...]], CommandResult]
@@ -18,11 +18,14 @@ def configured_flags(config: dict, *, default: tuple[str, ...] = ()) -> tuple[st
     return tuple(str(flag) for flag in raw)
 
 
-def executable_is_available(
-    binary: str,
-    executor: CommandExecutor | None,
-    *,
-    executable_resolver: Callable[[str], str | None] = which,
-) -> bool:
-    """Accept injected executors in tests; otherwise require a real executable."""
-    return executor is not None or executable_resolver(binary) is not None
+def resolve_external_binary(tool: str, binary: str, executor: CommandExecutor | None) -> tuple[str, str]:
+    """Return the verified executable for a real run, preserving test injection.
+
+    Adapters receive an absolute, fingerprinted path in production.  An
+    injected executor intentionally keeps its requested binary so command
+    contract tests do not require installed third-party tools.
+    """
+    if executor is not None:
+        return (binary, "")
+    resolution = require_tool(tool, executable=binary)
+    return (resolution.path, "") if resolution.valid else ("", resolution.detail)
