@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from shutil import which
 import time
 from typing import Callable
 
 from blackline.config.tool_loader import get_tool_config
-from blackline.tools.external import configured_flags, executable_is_available
+from blackline.tools.external import configured_flags, resolve_external_binary
 from blackline.tools.parsers.smbclient import parse_smbclient_grepable
 from blackline.utils.exec import CommandResult, run_command
 
@@ -54,8 +53,9 @@ def enumerate_smb_shares(
         return SmbClientResult(False, target, port, error="missing SMB target")
     if not 1 <= port <= 65535:
         return SmbClientResult(False, target, port, error="invalid SMB port")
-    if not executable_is_available(binary, executor, executable_resolver=which):
-        return SmbClientResult(False, target, port, skipped=True, error="smbclient unavailable")
+    binary, message = resolve_external_binary("smbclient", binary, executor)
+    if not binary:
+        return SmbClientResult(False, target, port, skipped=True, error=message)
     command = build_smbclient_command(target, port=port, binary=binary, config=config)
     started = time.perf_counter()
     runner = executor or (lambda args: run_command(args, timeout=timeout_seconds))
