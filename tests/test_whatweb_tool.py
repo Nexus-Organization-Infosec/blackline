@@ -56,7 +56,7 @@ class WhatWebToolTests(unittest.TestCase):
         self.assertIn("--aggression=1", commands[0])
 
     def test_missing_binary_skips_without_error(self):
-        with patch("blackline.tools.http.whatweb.which", return_value=None):
+        with patch("blackline.tools.http.whatweb.resolve_external_binary", return_value=("", "whatweb is unavailable")):
             result = fingerprint_with_whatweb("example.com", mode="http_probe", config={"binary": "whatweb"})
 
         self.assertTrue(result.skipped)
