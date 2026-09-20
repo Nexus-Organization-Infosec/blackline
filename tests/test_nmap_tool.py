@@ -146,17 +146,15 @@ class NmapToolTests(unittest.TestCase):
             seen["timeout"] = timeout
             return CommandResult(args=args, returncode=0, stdout="", stderr="", elapsed_seconds=0.25)
 
-        from blackline.tools.network import nmap as nmap_module
-
-        original_run_command = nmap_module.run_command
-        original_which = nmap_module.which
-        nmap_module.run_command = fake_run_command
-        nmap_module.which = lambda binary: binary
-        try:
+        with (
+            patch(
+                "blackline.tools.network.nmap.require_tool",
+                return_value=ToolResolution("nmap", path="nmap", valid=True, candidates=("nmap",)),
+            ),
+            patch("blackline.tools.network.nmap.run_command", side_effect=fake_run_command),
+            patch("blackline.tools.network.nmap.which", side_effect=lambda binary: binary),
+        ):
             execution = execute_nmap(NmapRequest(target="10.0.0.1"), executor=None, config=get_tool_config("nmap"))
-        finally:
-            nmap_module.run_command = original_run_command
-            nmap_module.which = original_which
 
         self.assertTrue(execution.ok)
         self.assertIsNone(seen["timeout"])
