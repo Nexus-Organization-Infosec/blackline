@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from shutil import which
 from tempfile import NamedTemporaryFile
 import time
 from typing import Callable
 
 from blackline.config.tool_loader import get_tool_config
-from blackline.tools.external import configured_flags, executable_is_available
+from blackline.tools.external import configured_flags, resolve_external_binary
 from blackline.tools.http.client import build_http_probe_urls
 from blackline.tools.parsers.whatweb import parse_whatweb_json
 from blackline.utils.exec import CommandResult, run_command
@@ -57,8 +56,9 @@ def fingerprint_with_whatweb(
     """Run a low-aggression WhatWeb scan and retain its JSON evidence."""
     config = config or get_tool_config("whatweb")
     binary = str(config.get("binary") or "whatweb")
-    if not executable_is_available(binary, executor, executable_resolver=which):
-        return WhatWebResult(False, target, skipped=True, error="whatweb unavailable")
+    binary, message = resolve_external_binary("whatweb", binary, executor)
+    if not binary:
+        return WhatWebResult(False, target, skipped=True, error=message)
     urls = build_http_probe_urls(mode=mode, host=(host or target).strip(), scheme=scheme, path=path, port=port)
     if not urls:
         return WhatWebResult(False, target, error="missing WhatWeb target")
