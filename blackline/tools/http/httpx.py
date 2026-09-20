@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import os
-from pathlib import Path
-from shutil import which
 import time
 from typing import Callable
 
 from blackline.config.tool_loader import get_tool_config
+from blackline.pathfinder import require_tool
 from blackline.tools.external import configured_flags
 from blackline.tools.http.client import build_http_probe_urls
 from blackline.tools.parsers.httpx import parse_httpx_jsonl
@@ -59,9 +57,10 @@ def probe_httpx(
     config = config or get_tool_config("httpx")
     binary = str(config.get("binary") or "httpx")
     if executor is None:
-        binary, message = resolve_projectdiscovery_httpx(binary, config=config)
-        if not binary:
-            return HttpxResult(False, target, skipped=True, error=message)
+        resolution = require_tool("httpx", executable=binary)
+        if not resolution.valid:
+            return HttpxResult(False, target, skipped=True, error=resolution.detail)
+        binary = resolution.path
 
     urls = build_http_probe_urls(mode=mode, host=(host or target).strip(), scheme=scheme, path=path, port=port)
     if not urls:
@@ -87,9 +86,10 @@ def discover_http_services(
     normalized = tuple(dict.fromkeys(endpoint.strip() for endpoint in endpoints if endpoint.strip()))
     target = ", ".join(normalized)
     if executor is None:
-        binary, message = resolve_projectdiscovery_httpx(binary, config=config)
-        if not binary:
-            return HttpxResult(False, target, skipped=True, error=message)
+        resolution = require_tool("httpx", executable=binary)
+        if not resolution.valid:
+            return HttpxResult(False, target, skipped=True, error=resolution.detail)
+        binary = resolution.path
     if not normalized:
         return HttpxResult(True, target, negative_observation=True)
 
@@ -147,44 +147,11 @@ def projectdiscovery_httpx_available(binary: str = "httpx", *, config: dict | No
     Both projects expose an ``httpx`` executable. The Python package accepts a
     different command line and would otherwise be mistaken for the scanner.
     """
-    resolved, message = resolve_projectdiscovery_httpx(binary, config=config)
-    return (bool(resolved), message)
+    resolution = require_tool("httpx", executable=binary)
+    return (resolution.valid, "" if resolution.valid else resolution.detail)
 
 
 def resolve_projectdiscovery_httpx(binary: str = "httpx", *, config: dict | None = None) -> tuple[str, str]:
-    """Return a verified ProjectDiscovery binary even when Python's httpx wins PATH."""
-    candidates = _httpx_candidates(binary)
-    if not candidates:
-        return ("", "ProjectDiscovery httpx is unavailable; run install httpx")
-    markers = _identity_markers(config)
-    for candidate in candidates:
-        version = run_command((candidate, "-version"), timeout=3.0)
-        output = " ".join((version.stdout or version.stderr or "").lower().split())
-        if version.ok and any(marker in output for marker in markers):
-            return (candidate, "")
-    return (
-        "",
-        "httpx was found, but it is not the ProjectDiscovery scanner; run 'install httpx' or add the correct binary to PATH",
-    )
-
-
-def _httpx_candidates(binary: str) -> tuple[str, ...]:
-    """Return executable candidates in PATH order, keeping an explicit path intact."""
-    explicit = Path(binary).expanduser()
-    if explicit.parent != Path("."):
-        return (str(explicit),) if explicit.is_file() else ()
-
-    first = which(binary)
-    candidates: list[str] = [first] if first else []
-    for directory in os.get_exec_path():
-        candidate = Path(directory) / binary
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            candidates.append(str(candidate))
-    return tuple(dict.fromkeys(candidates))
-
-
-def _identity_markers(config: dict | None) -> tuple[str, ...]:
-    config = config or get_tool_config("httpx")
-    configured = config.get("identity_markers", ()) if isinstance(config, dict) else ()
-    markers = tuple(str(marker).strip().lower() for marker in configured if str(marker).strip()) if isinstance(configured, list) else ()
-    return markers or ("current version", "httpx version", "projectdiscovery")
+    """Compatibility wrapper around Pathfinder's verified resolution."""
+    resolution = require_tool("httpx", executable=binary)
+    return (resolution.path, "") if resolution.valid else ("", resolution.detail)
