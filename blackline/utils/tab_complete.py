@@ -114,21 +114,31 @@ def completion_items(text: str) -> list[tuple[str, str]]:
     if leading.startswith("load "):
         return template_path_items(leading.removeprefix("load "))
 
-    if leading.startswith("install "):
-        prefix = leading.removeprefix("install ").strip().lower()
-        if prefix.startswith("all "):
-            group_prefix = prefix.removeprefix("all ").strip()
-            return [(group, "tool group") for group in installable_tool_groups() if group.startswith(group_prefix)]
-        items = [(tool, "tool") for tool in installable_tool_names() if tool.startswith(prefix)]
-        if "all".startswith(prefix):
-            items.append(("all", "tool group"))
-        return items
-
     if leading.startswith("tools "):
-        prefix = leading.removeprefix("tools ").strip().lower()
+        raw_argument = leading.removeprefix("tools ")
+        prefix = raw_argument.strip().lower()
+        if raw_argument.lower().startswith("install "):
+            install_prefix = raw_argument[len("install "):].strip().lower()
+            if install_prefix.startswith("all "):
+                group_prefix = install_prefix.removeprefix("all ").strip()
+                return [(group, "tool group") for group in installable_tool_groups() if group.startswith(group_prefix)]
+            items = [(tool, "tool") for tool in installable_tool_names() if tool.startswith(install_prefix)]
+            if "all".startswith(install_prefix):
+                items.append(("all", "tool group"))
+            return items
+        if raw_argument.lower().startswith("uninstall "):
+            tool_prefix = raw_argument[len("uninstall "):].strip().lower()
+            items = [(tool, "tool") for tool in installable_tool_names() if tool.startswith(tool_prefix)]
+            if "all".startswith(tool_prefix):
+                items.append(("all", "all tools"))
+            return items
         items = [(name, "tool") for name in known_tool_names() if name.startswith(prefix)]
         if "recon".startswith(prefix):
             items.append(("recon", "tool group"))
+        if "install".startswith(prefix):
+            items.append(("install", "add an optional tool"))
+        if "uninstall".startswith(prefix):
+            items.append(("uninstall", "remove an installed tool"))
         return items
 
     if leading.startswith("list "):
