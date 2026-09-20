@@ -12,11 +12,11 @@ def handle_install(argument: str, *, use_color: bool | None = None) -> bool:
     if not parts:
         available = ", ".join(installable_tool_names()) or "none"
         groups = ", ".join(installable_tool_groups()) or "none"
-        error(f"usage: install <tool> | install all [group] (tools: {available}; groups: {groups})", use_color=use_color)
+        error(f"usage: tools install <tool> | tools install all [group] (tools: {available}; groups: {groups})", use_color=use_color)
         return False
     if parts[0] != "all":
         if len(parts) != 1:
-            error("usage: install <tool> | install all [group]", use_color=use_color)
+            error("usage: tools install <tool> | tools install all [group]", use_color=use_color)
             return False
         tool = parts[0]
         info(f"installing {tool}", use_color=use_color)
@@ -28,7 +28,7 @@ def handle_install(argument: str, *, use_color: bool | None = None) -> bool:
         return False
 
     if len(parts) > 2:
-        error("usage: install all [group]", use_color=use_color)
+        error("usage: tools install all [group]", use_color=use_color)
         return False
     group = parts[1] if len(parts) == 2 else "all"
     tools = tools_for_install_group(group)
