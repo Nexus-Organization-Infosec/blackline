@@ -49,8 +49,8 @@ class SmbClientToolTests(unittest.TestCase):
         self.assertTrue(result.warnings)
         self.assertFalse(result.negative_observation)
 
-    @patch("blackline.tools.network.smbclient.which", return_value=None)
-    def test_missing_binary_is_a_graceful_skip(self, _which):
+    @patch("blackline.tools.network.smbclient.resolve_external_binary", return_value=("", "smbclient is unavailable"))
+    def test_missing_binary_is_a_graceful_skip(self, _resolver):
         result = enumerate_smb_shares("10.0.0.5", config={"binary": "smbclient"})
 
         self.assertTrue(result.skipped)
