@@ -33,20 +33,27 @@ class TabCompleteTests(unittest.TestCase):
         self.assertIn(("network", "tool"), items)
         self.assertIn(("recon", "tool"), items)
         self.assertIn(("exploit", "tool"), items)
-        self.assertIn(("install", "command"), items)
+        self.assertIn(("tools", "command"), items)
 
-    def test_install_completion_uses_configured_installer_tools(self):
-        self.assertIn(("httpx", "tool"), completion_items("install ht"))
-        self.assertEqual(current_completion_length("install ht", "ht"), 2)
+    def test_tools_install_completion_uses_configured_installer_tools(self):
+        self.assertIn(("httpx", "tool"), completion_items("tools install ht"))
+        self.assertEqual(current_completion_length("tools install ht", "ht"), 2)
 
-    def test_install_completion_offers_all_and_named_groups(self):
-        self.assertIn(("all", "tool group"), completion_items("install a"))
-        self.assertIn(("recon", "tool group"), completion_items("install all r"))
+    def test_tools_install_completion_offers_all_and_named_groups(self):
+        self.assertIn(("all", "tool group"), completion_items("tools install a"))
+        self.assertIn(("recon", "tool group"), completion_items("tools install all r"))
 
-    def test_empty_install_completion_keeps_individual_tools_alongside_all(self):
-        items = completion_items("install ")
+    def test_empty_tools_install_completion_keeps_individual_tools_alongside_all(self):
+        items = completion_items("tools install ")
         self.assertIn(("all", "tool group"), items)
         self.assertIn(("httpx", "tool"), items)
+
+    def test_tools_uninstall_completion_offers_individual_tools_and_all(self):
+        self.assertIn(("install", "add an optional tool"), completion_items("tools i"))
+        self.assertIn(("uninstall", "remove an installed tool"), completion_items("tools u"))
+        self.assertIn(("httpx", "tool"), completion_items("tools uninstall "))
+        self.assertIn(("httpx", "tool"), completion_items("tools uninstall ht"))
+        self.assertIn(("all", "all tools"), completion_items("tools uninstall a"))
 
     def test_help_completion_loads_topics_from_config(self):
         suggestions = complete_text("help rec")
