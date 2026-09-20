@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from shutil import which
 from tempfile import NamedTemporaryFile
 import time
 from typing import Callable
 
 from blackline.config.tool_loader import get_tool_config
-from blackline.tools.external import configured_flags, executable_is_available
+from blackline.tools.external import configured_flags, resolve_external_binary
 from blackline.tools.parsers.sslyze import parse_sslyze_json
 from blackline.utils.exec import CommandResult, run_command
 
@@ -51,8 +50,9 @@ def inspect_tls_configuration(
     binary = str(config.get("binary") or "sslyze")
     if not host:
         return SslyzeResult(False, host, port, error="missing SSLyze target")
-    if not executable_is_available(binary, executor, executable_resolver=which):
-        return SslyzeResult(False, host, port, skipped=True, error="sslyze unavailable")
+    binary, message = resolve_external_binary("sslyze", binary, executor)
+    if not binary:
+        return SslyzeResult(False, host, port, skipped=True, error=message)
     with NamedTemporaryFile(prefix="blackline-sslyze-", suffix=".json", delete=False) as handle:
         json_path = Path(handle.name)
     started = time.perf_counter()
