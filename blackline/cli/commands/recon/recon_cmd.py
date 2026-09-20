@@ -486,7 +486,7 @@ def _render_subfinder_section(payload: dict, *, use_color: bool | None = None) -
     """Render passive subdomain discoveries without exposing JSONL output."""
     _render_section_header("subdomains", _provider_names(payload, fallback="subfinder"), use_color=use_color)
     if payload.get("skipped"):
-        _render_field("status", "skipped (Subfinder unavailable; run install subfinder)", use_color=use_color)
+        _render_field("status", "skipped (Subfinder unavailable; run tools install subfinder)", use_color=use_color)
         write_line(use_color=use_color)
         return
     findings = payload.get("subdomains", [])
@@ -537,7 +537,7 @@ def _render_httpx_section(payload: dict, *, use_color: bool | None = None) -> No
     """Render HTTP service confirmation from httpx without raw JSON noise."""
     _render_section_header("http services", _provider_names(payload, fallback="httpx"), use_color=use_color)
     if payload.get("skipped"):
-        _render_field("status", "skipped (httpx unavailable; run install httpx)", use_color=use_color)
+        _render_field("status", "skipped (httpx unavailable; run tools install httpx)", use_color=use_color)
         write_line(use_color=use_color)
         return
     findings = payload.get("findings", [])
@@ -574,7 +574,7 @@ def _render_whatweb_section(payload: dict, *, use_color: bool | None = None) -> 
     """Render WhatWeb technology evidence without exposing raw plugin JSON."""
     _render_section_header("whatweb", _provider_names(payload, fallback="whatweb"), use_color=use_color)
     if payload.get("skipped"):
-        _render_field("status", "skipped (WhatWeb unavailable; run install whatweb)", use_color=use_color)
+        _render_field("status", "skipped (WhatWeb unavailable; run tools install whatweb)", use_color=use_color)
         write_line(use_color=use_color)
         return
     findings = payload.get("findings", [])
@@ -602,7 +602,7 @@ def _render_katana_section(payload: dict, *, use_color: bool | None = None) -> N
     """Render a bounded endpoint inventory from Katana crawl evidence."""
     _render_section_header("web crawl", _provider_names(payload, fallback="katana"), use_color=use_color)
     if payload.get("skipped"):
-        _render_field("status", "skipped (Katana unavailable; run install katana)", use_color=use_color)
+        _render_field("status", "skipped (Katana unavailable; run tools install katana)", use_color=use_color)
         write_line(use_color=use_color)
         return
     findings = payload.get("findings", [])
@@ -634,7 +634,7 @@ def _render_rpcinfo_section(payload: dict, *, use_color: bool | None = None) -> 
     """Render registered portmapper programs as concise structured evidence."""
     _render_section_header("rpc services", _provider_names(payload, fallback="rpcinfo"), use_color=use_color)
     if payload.get("skipped"):
-        _render_field("status", "skipped (rpcinfo unavailable; run install rpcinfo)", use_color=use_color)
+        _render_field("status", "skipped (rpcinfo unavailable; run tools install rpcinfo)", use_color=use_color)
         write_line(use_color=use_color)
         return
     records = payload.get("registrations", [])
@@ -655,7 +655,7 @@ def _render_smbclient_section(payload: dict, *, use_color: bool | None = None) -
     """Render anonymous SMB share metadata without accessing share contents."""
     _render_section_header("SMB shares", _provider_names(payload, fallback="smbclient"), use_color=use_color)
     if payload.get("skipped"):
-        _render_field("status", "skipped (smbclient unavailable; run install smbclient)", use_color=use_color)
+        _render_field("status", "skipped (smbclient unavailable; run tools install smbclient)", use_color=use_color)
         write_line(use_color=use_color)
         return
     shares = payload.get("shares", [])
@@ -707,7 +707,7 @@ def _render_sslyze_section(payload: dict, *, use_color: bool | None = None) -> N
     """Render normalized TLS configuration coverage and notable findings."""
     _render_section_header("tls configuration", _provider_names(payload, fallback="sslyze"), use_color=use_color)
     if payload.get("skipped"):
-        _render_field("status", "skipped (SSLyze unavailable; run install sslyze)", use_color=use_color)
+        _render_field("status", "skipped (SSLyze unavailable; run tools install sslyze)", use_color=use_color)
         write_line(use_color=use_color)
         return
     scans = payload.get("scans", [])
