@@ -33,7 +33,7 @@ class RpcInfoToolTests(unittest.TestCase):
         self.assertEqual(result.registrations[2].service, "mountd")
 
     def test_missing_binary_skips_safely(self):
-        with patch("blackline.tools.network.rpcinfo.which", return_value=None):
+        with patch("blackline.tools.network.rpcinfo.resolve_external_binary", return_value=("", "rpcinfo is unavailable")):
             result = query_rpcinfo("10.0.0.174", config={"binary": "rpcinfo"})
 
         self.assertTrue(result.skipped)
