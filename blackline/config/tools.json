@@ -106,7 +106,7 @@
     },
     "httpx": {
       "binary": "httpx",
-      "identity_markers": ["current version", "httpx version", "projectdiscovery"],
+      "identity_markers": ["projectdiscovery"],
       "flags": ["-json", "-sc", "-title", "-location", "-td", "-tls-grab", "-silent"]
     },
     "whatweb": {
