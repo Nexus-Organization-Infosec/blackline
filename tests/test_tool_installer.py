@@ -255,6 +255,26 @@ class ToolInstallerTests(unittest.TestCase):
         self.assertEqual(install.call_args_list[1].args, ("naabu",))
         self.assertIn("1/2 tools installed", output.getvalue())
 
+    def test_install_all_verbose_shows_installer_output(self):
+        success = type("Outcome", (), {"installed": True, "message": "installed", "output": "downloaded package"})()
+        output = io.StringIO()
+        with patch("blackline.cli.commands.utils.tool_install_cmd.tools_for_install_group", return_value=("httpx",)), patch(
+            "blackline.cli.commands.utils.tool_install_cmd.install_tool", return_value=success
+        ):
+            with redirect_stdout(output):
+                completed = handle_install("all verbose", use_color=False)
+
+        self.assertTrue(completed)
+        self.assertIn("httpx output:", output.getvalue())
+        self.assertIn("downloaded package", output.getvalue())
+
+    def test_install_all_accepts_a_group_before_verbose(self):
+        with patch("blackline.cli.commands.utils.tool_install_cmd.tools_for_install_group", return_value=()) as groups:
+            with redirect_stdout(io.StringIO()):
+                handle_install("all recon verbose", use_color=False)
+
+        groups.assert_called_once_with("recon")
+
     def test_uninstall_all_continues_after_one_tool_fails(self):
         success = type("Outcome", (), {"removed": True, "message": "removed"})()
         failure = type("Outcome", (), {"removed": False, "message": "not installed"})()
