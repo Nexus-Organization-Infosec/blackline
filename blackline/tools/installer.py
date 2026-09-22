@@ -51,6 +51,7 @@ class ToolInstallResult:
     manager: str = ""
     command: tuple[str, ...] = ()
     message: str = ""
+    output: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -269,8 +270,10 @@ def install_tool(
         executable_resolver=executable_resolver,
     )
     failures: list[str] = []
+    outputs: list[str] = []
     for plan in plans:
         result = executor(plan.command)
+        outputs.append(_command_output(result))
         if result.ok:
             available = executable_resolver(binary) is not None
             message = f"installed {binary} with {plan.manager}"
@@ -285,6 +288,7 @@ def install_tool(
                 manager=plan.manager,
                 command=plan.command,
                 message=message,
+                output=_join_output(outputs),
             )
         detail = result.stderr.strip() or f"exit {result.returncode}"
         failures.append(f"{plan.manager}: {detail}")
@@ -310,10 +314,11 @@ def install_tool(
         if outcome.installed:
             return outcome
         failures.append(f"{plan.manager}: {outcome.message}")
+        outputs.append(outcome.output)
 
     if not plans and not source_plans:
         platform_label = platform_name or current_system()
-        return ToolInstallResult(normalized, binary, message=f"no supported installer is available for {binary} on {platform_label}")
+        return ToolInstallResult(normalized, binary, message=f"no supported installer is available for {binary} on {platform_label}", output=_join_output(outputs))
 
     first = plans[0] if plans else source_plans[0]
     return ToolInstallResult(
@@ -323,6 +328,7 @@ def install_tool(
         manager=first.manager,
         command=first.command if isinstance(first, ToolInstallPlan) else first.build_commands[-1],
         message=f"could not install {binary} ({'; '.join(failures)})",
+        output=_join_output(outputs),
     )
 
 
@@ -403,6 +409,15 @@ def _tool_is_available(tool: str, binary: str, executable_resolver: Callable[[st
     return require_tool(tool, executable=binary).valid
 
 
+def _command_output(result: CommandResult) -> str:
+    """Preserve installer stdout and stderr for an explicit verbose request."""
+    return "\n".join(part.strip() for part in (result.stdout, result.stderr) if part.strip())
+
+
+def _join_output(outputs: list[str]) -> str:
+    return "\n".join(output for output in outputs if output)
+
+
 def _uninstall_command(command: tuple[str, ...]) -> tuple[str, ...]:
     """Translate only declarative package install routes with safe inverse actions."""
     if len(command) < 3 or command[0] == "go" or command[1] != "install":
@@ -445,6 +460,7 @@ def _install_from_source(
     except OSError as exc:
         return ToolInstallResult(plan.tool, plan.binary, manager=plan.manager, message=f"could not prepare local install directories: {exc}")
 
+    outputs: list[str] = []
     if source_dir.exists():
         if not source_dir.is_dir() or not (source_dir / ".git").is_dir():
             return ToolInstallResult(plan.tool, plan.binary, manager=plan.manager, message=f"source directory is not a Git checkout: {source_dir}")
@@ -457,24 +473,27 @@ def _install_from_source(
         clone_command.extend([plan.repository, str(source_dir)])
         checkout = executor(tuple(clone_command))
         action = "clone"
+    outputs.append(_command_output(checkout))
     if not checkout.ok:
         detail = checkout.stderr.strip() or f"exit {checkout.returncode}"
-        return ToolInstallResult(plan.tool, plan.binary, attempted=True, manager=plan.manager, command=checkout.args, message=f"could not {action} source repository: {detail}")
+        return ToolInstallResult(plan.tool, plan.binary, attempted=True, manager=plan.manager, command=checkout.args, message=f"could not {action} source repository: {detail}", output=_join_output(outputs))
 
     if action == "update":
         checkout = executor(("git", "-C", str(source_dir), "checkout", "--detach", "FETCH_HEAD"))
+        outputs.append(_command_output(checkout))
         if not checkout.ok:
             detail = checkout.stderr.strip() or f"exit {checkout.returncode}"
-            return ToolInstallResult(plan.tool, plan.binary, attempted=True, manager=plan.manager, command=checkout.args, message=f"could not update source repository: {detail}")
+            return ToolInstallResult(plan.tool, plan.binary, attempted=True, manager=plan.manager, command=checkout.args, message=f"could not update source repository: {detail}", output=_join_output(outputs))
 
     last_command: tuple[str, ...] = ()
     for command in plan.build_commands:
         rendered = tuple(part.format(source_dir=str(source_dir), install_dir=str(install_dir), binary=plan.binary) for part in command)
         last_command = rendered
         result = build_executor(rendered, source_dir)
+        outputs.append(_command_output(result))
         if not result.ok:
             detail = result.stderr.strip() or f"exit {result.returncode}"
-            return ToolInstallResult(plan.tool, plan.binary, attempted=True, manager=plan.manager, command=rendered, message=f"source build failed: {detail}")
+            return ToolInstallResult(plan.tool, plan.binary, attempted=True, manager=plan.manager, command=rendered, message=f"source build failed: {detail}", output=_join_output(outputs))
 
     available = executable_resolver(plan.binary) is not None
     installed_path = install_dir / plan.binary
@@ -483,4 +502,4 @@ def _install_from_source(
     message = f"installed {plan.binary} from {plan.repository} with {plan.manager}"
     if not available:
         message += f"; add {install_dir} to PATH or restart the shell"
-    return ToolInstallResult(plan.tool, plan.binary, attempted=True, installed=True, available=available, manager=plan.manager, command=last_command, message=message)
+    return ToolInstallResult(plan.tool, plan.binary, attempted=True, installed=True, available=available, manager=plan.manager, command=last_command, message=message, output=_join_output(outputs))
