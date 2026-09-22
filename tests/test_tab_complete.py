@@ -42,6 +42,8 @@ class TabCompleteTests(unittest.TestCase):
     def test_tools_install_completion_offers_all_and_named_groups(self):
         self.assertIn(("all", "tool group"), completion_items("tools install a"))
         self.assertIn(("recon", "tool group"), completion_items("tools install all r"))
+        self.assertIn(("verbose", "show installer output"), completion_items("tools install all v"))
+        self.assertIn(("verbose", "show installer output"), completion_items("tools install all recon v"))
 
     def test_empty_tools_install_completion_keeps_individual_tools_alongside_all(self):
         items = completion_items("tools install ")
