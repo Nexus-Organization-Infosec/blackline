@@ -120,8 +120,15 @@ def completion_items(text: str) -> list[tuple[str, str]]:
         if raw_argument.lower().startswith("install "):
             install_prefix = raw_argument[len("install "):].strip().lower()
             if install_prefix.startswith("all "):
-                group_prefix = install_prefix.removeprefix("all ").strip()
-                return [(group, "tool group") for group in installable_tool_groups() if group.startswith(group_prefix)]
+                selector = install_prefix.removeprefix("all ").strip()
+                selector_parts = selector.split()
+                if len(selector_parts) > 1:
+                    verbose_prefix = selector_parts[-1]
+                    return [("verbose", "show installer output")] if "verbose".startswith(verbose_prefix) else []
+                items = [(group, "tool group") for group in installable_tool_groups() if group.startswith(selector)]
+                if "verbose".startswith(selector):
+                    items.append(("verbose", "show installer output"))
+                return items
             items = [(tool, "tool") for tool in installable_tool_names() if tool.startswith(install_prefix)]
             if "all".startswith(install_prefix):
                 items.append(("all", "tool group"))
