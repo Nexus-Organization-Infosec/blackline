@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from concurrent.futures import Future, ThreadPoolExecutor
+from contextvars import copy_context
 from dataclasses import dataclass
 from typing import Callable
 
@@ -25,7 +26,7 @@ from blackline.tools.network.rpcinfo import query_rpcinfo
 from blackline.tools.network.smbclient import enumerate_smb_shares
 from blackline.tools.tls.inspector import inspect_tls
 from blackline.tools.tls.sslyze import inspect_tls_configuration
-from blackline.utils.exec import CommandResult
+from blackline.utils.exec import CommandResult, CommandTraceCallback, trace_commands
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +80,7 @@ def execute_plan(
     command_executor: Callable[[tuple[str, ...]], CommandResult] | None = None,
     control: ExecutionControl | None = None,
     progress_callback: Callable[[ExecutionProgress], None] | None = None,
+    command_callback: CommandTraceCallback | None = None,
 ) -> tuple[StepResult, ...]:
     """Execute each step in the given plan."""
     indexed_steps = tuple(enumerate(plan.steps))
@@ -86,22 +88,23 @@ def execute_plan(
     runtime_state: dict[str, object] = {}
     control = control or ExecutionControl()
     completed = 0
-    for group in _plan_step_groups(indexed_steps):
-        if control.cancelled:
-            break
-        for _, step in group:
-            _emit_progress(progress_callback, "started", completed, len(indexed_steps), step)
-        group_results = _execute_step_group(
-            group,
-            command_executor=command_executor,
-            runtime_state=runtime_state,
-            control=control,
-        )
-        for index, result in group_results:
-            _update_runtime_state(runtime_state, result)
-            result_slots[index] = result
-            completed += 1
-            _emit_progress(progress_callback, "completed", completed, len(indexed_steps), plan.steps[index], result)
+    with trace_commands(command_callback):
+        for group in _plan_step_groups(indexed_steps):
+            if control.cancelled:
+                break
+            for _, step in group:
+                _emit_progress(progress_callback, "started", completed, len(indexed_steps), step)
+            group_results = _execute_step_group(
+                group,
+                command_executor=command_executor,
+                runtime_state=runtime_state,
+                control=control,
+            )
+            for index, result in group_results:
+                _update_runtime_state(runtime_state, result)
+                result_slots[index] = result
+                completed += 1
+                _emit_progress(progress_callback, "completed", completed, len(indexed_steps), plan.steps[index], result)
     return tuple(result for result in result_slots if result is not None)
 
 
@@ -757,10 +760,11 @@ def _execute_step_group(
                 (
                     index,
                     pool.submit(
-                    execute_step,
-                    step,
-                    command_executor=command_executor,
-                    runtime_state=dict(base_state),
+                        copy_context().run,
+                        execute_step,
+                        step,
+                        command_executor=command_executor,
+                        runtime_state=dict(base_state),
                     ),
                 )
             )
