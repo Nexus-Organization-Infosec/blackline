@@ -204,10 +204,10 @@
           "name": "tools",
           "kind": "command",
           "description": "list configured tools and their installation status",
-          "usage": "tools [recon|<tool>|install <tool|all> [verbose]|uninstall <tool|all>]",
-          "long_description": "List every configured tool, restrict the list to reconnaissance providers, inspect one tool's location and install routes, install an optional tool, or remove one through its configured package manager. Add verbose to a bulk install when you need the installer output for debugging.",
-          "arguments": [["recon", "show only reconnaissance providers"], ["tool", "show details for one tool"], ["install", "install one optional tool or all optional tools"], ["verbose", "show installer output for a bulk install"], ["uninstall", "remove one optional tool or all optional tools"]],
-          "examples": ["tools", "tools recon", "tools httpx", "tools install httpx", "tools install all", "tools install all verbose", "tools uninstall httpx", "tools uninstall all"]
+          "usage": "tools [recon|<tool>|install <tool|all> [source] [verbose]|uninstall <tool|all>]",
+          "long_description": "List every configured tool, restrict the list to reconnaissance providers, inspect one tool's location and install routes, install an optional tool, or remove one through its configured package manager. Source prefers Blackline's local clone-and-build route, and verbose shows installer output for a bulk install.",
+          "arguments": [["recon", "show only reconnaissance providers"], ["tool", "show details for one tool"], ["install", "install one optional tool or all optional tools"], ["source", "prefer Blackline's local source build"], ["verbose", "show installer output for a bulk install"], ["uninstall", "remove one optional tool or all optional tools"]],
+          "examples": ["tools", "tools recon", "tools httpx", "tools install httpx", "tools install httpx source", "tools install all", "tools install all source verbose", "tools uninstall httpx", "tools uninstall all"]
         },
         {
           "name": "find_exploit",
