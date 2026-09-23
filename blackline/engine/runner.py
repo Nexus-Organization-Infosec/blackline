@@ -12,7 +12,7 @@ from blackline.engine.executor import ExecutionControl, ExecutionProgress, StepR
 from blackline.engine.planner import ExecutionPlan, build_essential_recon_plan, build_plan
 from blackline.engine.context import ExecutionContext
 from blackline.engine.session import EngineSession
-from blackline.utils.exec import CommandResult
+from blackline.utils.exec import CommandResult, CommandTraceCallback
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +39,7 @@ def run_expression(
     plan_callback: Callable[[ExecutionPlan], None] | None = None,
     progress_callback: Callable[[ExecutionProgress], None] | None = None,
     vector_callback: Callable[[object], None] | None = None,
+    command_callback: CommandTraceCallback | None = None,
 ) -> RunResult:
     """Parse, plan, and execute one expression."""
     session = session or EngineSession()
@@ -52,6 +53,7 @@ def run_expression(
             plan_callback=plan_callback,
             progress_callback=progress_callback,
             vector_callback=vector_callback,
+            command_callback=command_callback,
         )
     plan = build_plan(context)
     if plan_callback is not None:
@@ -62,6 +64,7 @@ def run_expression(
         command_executor=command_executor,
         control=control,
         progress_callback=progress_callback,
+        command_callback=command_callback,
     )
     session.runs.append(expression)
     return RunResult(
@@ -82,6 +85,7 @@ def _run_recon_iteratively(
     plan_callback: Callable[[ExecutionPlan], None] | None,
     progress_callback: Callable[[ExecutionProgress], None] | None,
     vector_callback: Callable[[object], None] | None,
+    command_callback: CommandTraceCallback | None,
 ) -> RunResult:
     """Execute essential discovery, then let Vector create bounded follow-ups."""
     from blackline.core.recon.vector_adapter import (
@@ -103,6 +107,7 @@ def _run_recon_iteratively(
             command_executor=command_executor,
             control=control,
             progress_callback=progress_callback,
+            command_callback=command_callback,
         )
     )
     vector = create_recon_vector(context)
@@ -132,6 +137,7 @@ def _run_recon_iteratively(
             command_executor=command_executor,
             control=control,
             progress_callback=progress_callback,
+            command_callback=command_callback,
         )
         all_steps.extend(followup_plan.steps)
         all_results.extend(latest_results)
@@ -162,17 +168,19 @@ def parse_expression(expression: str, *, job_id: str = "") -> ExecutionContext:
         return ExecutionContext(expression=expression, module=stripped, params={}, job_id=job_id)
 
     module, raw_params = stripped.split("[", 1)
+    clean_module = module.strip()
     params: dict[str, str] = {}
     raw_params = raw_params[:-1].strip()
     if raw_params:
         for pair in raw_params.split(","):
             if "=" not in pair:
+                if clean_module == "recon" and pair.strip().lower() == "verbose":
+                    params["verbose"] = "true"
                 continue
             key, value = pair.split("=", 1)
             params[key.strip()] = value.strip()
 
     normalized_target = None
-    clean_module = module.strip()
     if clean_module == "recon" and params.get("target"):
         try:
             normalized_target = build_recon_pipeline(params["target"]).target
