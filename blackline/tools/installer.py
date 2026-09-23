@@ -240,6 +240,7 @@ def default_install_dir() -> Path:
 def install_tool(
     tool: str,
     *,
+    prefer_source: bool = False,
     platform_name: str | None = None,
     config: dict | None = None,
     executable_resolver: Callable[[str], str | None] = which,
@@ -269,8 +270,32 @@ def install_tool(
         config=config,
         executable_resolver=executable_resolver,
     )
+    source_plans = source_build_plans(
+        normalized,
+        platform_name=platform_name,
+        config=config,
+        executable_resolver=executable_resolver,
+    )
+    source_root = source_root or default_source_root()
+    install_dir = install_dir or default_install_dir()
+    build_executor = build_executor or (lambda command, cwd: run_command(command, cwd=cwd, timeout=None))
     failures: list[str] = []
     outputs: list[str] = []
+
+    if prefer_source:
+        source_outcome, source_failures, source_output = _attempt_source_builds(
+            source_plans,
+            source_root=source_root,
+            install_dir=install_dir,
+            executable_resolver=executable_resolver,
+            executor=executor,
+            build_executor=build_executor,
+        )
+        failures.extend(source_failures)
+        outputs.extend(source_output)
+        if source_outcome is not None:
+            return source_outcome
+
     for plan in plans:
         result = executor(plan.command)
         outputs.append(_command_output(result))
@@ -293,28 +318,19 @@ def install_tool(
         detail = result.stderr.strip() or f"exit {result.returncode}"
         failures.append(f"{plan.manager}: {detail}")
 
-    source_plans = source_build_plans(
-        normalized,
-        platform_name=platform_name,
-        config=config,
-        executable_resolver=executable_resolver,
-    )
-    source_root = source_root or default_source_root()
-    install_dir = install_dir or default_install_dir()
-    build_executor = build_executor or (lambda command, cwd: run_command(command, cwd=cwd, timeout=None))
-    for plan in source_plans:
-        outcome = _install_from_source(
-            plan,
+    if not prefer_source:
+        source_outcome, source_failures, source_output = _attempt_source_builds(
+            source_plans,
             source_root=source_root,
             install_dir=install_dir,
             executable_resolver=executable_resolver,
             executor=executor,
             build_executor=build_executor,
         )
-        if outcome.installed:
-            return outcome
-        failures.append(f"{plan.manager}: {outcome.message}")
-        outputs.append(outcome.output)
+        failures.extend(source_failures)
+        outputs.extend(source_output)
+        if source_outcome is not None:
+            return source_outcome
 
     if not plans and not source_plans:
         platform_label = platform_name or current_system()
@@ -441,6 +457,34 @@ def _remove_managed_source(*, tool: str, binary: str, source_root: Path, install
     except OSError as exc:
         return (removed, f"could not remove Blackline-managed files: {exc}")
     return (removed, "")
+
+
+def _attempt_source_builds(
+    plans: tuple[SourceBuildPlan, ...],
+    *,
+    source_root: Path,
+    install_dir: Path,
+    executable_resolver: Callable[[str], str | None],
+    executor: Callable[[tuple[str, ...]], CommandResult],
+    build_executor: Callable[[tuple[str, ...], Path], CommandResult],
+) -> tuple[ToolInstallResult | None, list[str], list[str]]:
+    """Try configured source builds and retain their diagnostics for fallback."""
+    failures: list[str] = []
+    outputs: list[str] = []
+    for plan in plans:
+        outcome = _install_from_source(
+            plan,
+            source_root=source_root,
+            install_dir=install_dir,
+            executable_resolver=executable_resolver,
+            executor=executor,
+            build_executor=build_executor,
+        )
+        outputs.append(outcome.output)
+        if outcome.installed:
+            return (outcome, failures, outputs)
+        failures.append(f"{plan.manager}: {outcome.message}")
+    return (None, failures, outputs)
 
 
 def _install_from_source(
