@@ -187,6 +187,44 @@ class ToolInstallerTests(unittest.TestCase):
         self.assertEqual(events[0][0], "brew")
         self.assertEqual(events[1][0], "git")
 
+    def test_source_preference_builds_before_trying_a_package_manager(self):
+        config = {
+            "tools": {
+                "source-sample": {
+                    **SOURCE_CONFIG["tools"]["source-sample"],
+                    "platforms": {"Darwin": [{"manager": "Homebrew", "manager_binary": "brew", "command": ["brew", "install", "source-sample"]}]},
+                }
+            }
+        }
+        commands = []
+        available = {"value": False}
+
+        def resolver(name):
+            if name in {"brew", "git", "make"}:
+                return f"/usr/bin/{name}"
+            return "/tmp/source-sample" if name == "source-sample" and available["value"] else None
+
+        def executor(command):
+            commands.append(command)
+            return command_result(command)
+
+        def builder(command, _cwd):
+            commands.append(command)
+            available["value"] = True
+            return command_result(command)
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            outcome = install_tool(
+                "source-sample", prefer_source=True, platform_name="Darwin", config=config,
+                executable_resolver=resolver, executor=executor, build_executor=builder,
+                source_root=root / "sources", install_dir=root / "bin",
+            )
+
+        self.assertTrue(outcome.installed)
+        self.assertEqual(commands[0][0], "git")
+        self.assertNotIn("brew", [command[0] for command in commands])
+
     def test_uninstall_uses_the_inverse_of_a_configured_package_route(self):
         plans = uninstallation_plans(
             "sample",
@@ -267,6 +305,15 @@ class ToolInstallerTests(unittest.TestCase):
         self.assertTrue(completed)
         self.assertIn("httpx output:", output.getvalue())
         self.assertIn("downloaded package", output.getvalue())
+
+    def test_install_source_tag_prefers_a_source_build(self):
+        success = type("Outcome", (), {"installed": True, "message": "built", "output": ""})()
+        with patch("blackline.cli.commands.utils.tool_install_cmd.install_tool", return_value=success) as install:
+            with redirect_stdout(io.StringIO()):
+                completed = handle_install("httpx source", use_color=False)
+
+        self.assertTrue(completed)
+        install.assert_called_once_with("httpx", prefer_source=True)
 
     def test_install_all_accepts_a_group_before_verbose(self):
         with patch("blackline.cli.commands.utils.tool_install_cmd.tools_for_install_group", return_value=()) as groups:
