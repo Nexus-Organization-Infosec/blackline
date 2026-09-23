@@ -123,9 +123,15 @@ def completion_items(text: str) -> list[tuple[str, str]]:
                 selector = install_prefix.removeprefix("all ").strip()
                 selector_parts = selector.split()
                 if len(selector_parts) > 1:
-                    verbose_prefix = selector_parts[-1]
-                    return [("verbose", "show installer output")] if "verbose".startswith(verbose_prefix) else []
+                    modifier_prefix = selector_parts[-1]
+                    return [
+                        (tag, description)
+                        for tag, description in (("source", "prefer a local source build"), ("verbose", "show installer output"))
+                        if tag.startswith(modifier_prefix)
+                    ]
                 items = [(group, "tool group") for group in installable_tool_groups() if group.startswith(selector)]
+                if "source".startswith(selector):
+                    items.append(("source", "prefer a local source build"))
                 if "verbose".startswith(selector):
                     items.append(("verbose", "show installer output"))
                 return items
