@@ -43,6 +43,10 @@
         "transport": {
           "description": "network transport focus",
           "choices": ["tcp", "udp"]
+        },
+        "verbose": {
+          "description": "show each check, resolved command, and tool output while recon runs",
+          "choices": ["true", "false"]
         }
       }
     },
