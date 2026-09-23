@@ -12,25 +12,27 @@ def handle_install(argument: str, *, use_color: bool | None = None) -> bool:
     if not parts:
         available = ", ".join(installable_tool_names()) or "none"
         groups = ", ".join(installable_tool_groups()) or "none"
-        error(f"usage: tools install <tool> | tools install all [group] [verbose] (tools: {available}; groups: {groups})", use_color=use_color)
+        error(f"usage: tools install <tool> [source] | tools install all [group] [source] [verbose] (tools: {available}; groups: {groups})", use_color=use_color)
         return False
     if parts[0] != "all":
-        if len(parts) != 1:
-            error("usage: tools install <tool> | tools install all [group] [verbose]", use_color=use_color)
+        source = parts[1:] == ["source"]
+        if len(parts) != 1 and not source:
+            error("usage: tools install <tool> [source] | tools install all [group] [source] [verbose]", use_color=use_color)
             return False
         tool = parts[0]
-        info(f"installing {tool}", use_color=use_color)
-        outcome = install_tool(tool)
+        info(f"building {tool} from source" if source else f"installing {tool}", use_color=use_color)
+        outcome = install_tool(tool, prefer_source=True) if source else install_tool(tool)
         if outcome.installed:
             result(outcome.message, use_color=use_color)
             return True
         error(outcome.message, use_color=use_color)
         return False
 
-    verbose = parts[-1] == "verbose"
-    selectors = parts[1:-1] if verbose else parts[1:]
+    verbose = "verbose" in parts[1:]
+    source = "source" in parts[1:]
+    selectors = [part for part in parts[1:] if part not in {"source", "verbose"}]
     if len(selectors) > 1:
-        error("usage: tools install all [group] [verbose]", use_color=use_color)
+        error("usage: tools install all [group] [source] [verbose]", use_color=use_color)
         return False
     group = selectors[0] if selectors else "all"
     tools = tools_for_install_group(group)
@@ -38,10 +40,11 @@ def handle_install(argument: str, *, use_color: bool | None = None) -> bool:
         groups = ", ".join(installable_tool_groups()) or "none"
         error(f"unknown or empty install group: {group} (groups: {groups})", use_color=use_color)
         return False
-    info(f"installing {len(tools)} tools from {group}", use_color=use_color)
+    action = "building from source" if source else "installing"
+    info(f"{action} {len(tools)} tools from {group}", use_color=use_color)
     failures = 0
     for tool in tools:
-        outcome = install_tool(tool)
+        outcome = install_tool(tool, prefer_source=True) if source else install_tool(tool)
         if outcome.installed:
             result(f"{tool}: {outcome.message}", use_color=use_color)
         else:
