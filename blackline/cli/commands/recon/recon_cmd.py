@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from difflib import get_close_matches
 from pathlib import Path
+import shlex
 import sys
 from urllib.parse import urlsplit
 
@@ -18,6 +19,7 @@ from blackline.engine.runner import normalize_expression, parse_expression, run_
 from blackline.engine.executor import ExecutionProgress
 from blackline.engine.planner import ExecutionPlan, PlanStep
 from blackline.engine.session import EngineSession
+from blackline.utils.exec import CommandTraceEvent
 
 
 def handle_recon(
@@ -35,12 +37,23 @@ def handle_recon(
         return False
 
     progress = ReconProgressRenderer(use_color=use_color)
+    verbose = ReconVerboseRenderer(enabled=_verbose_requested(parse_expression(expression).params))
+
+    def show_plan(plan: ExecutionPlan) -> None:
+        progress.show_plan(plan)
+        verbose.show_plan(plan)
+
+    def update_progress(event: ExecutionProgress) -> None:
+        progress.update(event)
+        verbose.update(event)
+
     run = run_expression(
         expression,
         session=EngineSession(active_job=active_job),
-        plan_callback=progress.show_plan,
-        progress_callback=progress.update,
+        plan_callback=show_plan,
+        progress_callback=update_progress,
         vector_callback=lambda investigation_round: render_vector_round(investigation_round, use_color=use_color),
+        command_callback=verbose.command,
     )
     progress.finish(cancelled=run.cancelled)
     if not run.plan.steps:
@@ -226,6 +239,103 @@ class ReconProgressRenderer:
         sys.stdout.flush()
         self.rendered = True
         self.rendered_lines = self.total + 1
+
+
+class ReconVerboseRenderer:
+    """Render the execution plan and unfiltered subprocess diagnostics."""
+
+    def __init__(self, *, enabled: bool) -> None:
+        self.enabled = enabled
+
+    def show_plan(self, plan: ExecutionPlan) -> None:
+        """Show the checks and their resolved input before execution begins."""
+        if not self.enabled or not plan.steps:
+            return
+        write_segments(
+            [("[verbose]", "cyan"), (f" plan: {len(plan.steps)} checks", "white")],
+            use_color=False,
+        )
+        for step in plan.steps:
+            write_line(f"          {_verbose_step_label(step)}", use_color=False)
+
+    def update(self, event: ExecutionProgress) -> None:
+        """Show lifecycle and normalized outcomes for every recon check."""
+        if not self.enabled:
+            return
+        label = _verbose_step_label(event.step)
+        if event.state == "started":
+            write_segments(
+                [("[verbose]", "cyan"), (f" running: {label}", "white")],
+                use_color=False,
+            )
+            return
+        if event.state != "completed" or event.result is None:
+            return
+        outcome = _progress_display_state(_progress_state(event.result))
+        payload = event.result.payload if isinstance(event.result.payload, dict) else {}
+        elapsed = _step_elapsed_seconds(payload)
+        write_segments(
+            [("[verbose]", "cyan"), (f" finished: {label} -> {outcome} ({format_elapsed(elapsed)})", "white")],
+            use_color=False,
+        )
+        if event.result.error:
+            write_line(f"          error: {event.result.error}", use_color=False)
+        warnings = payload.get("warnings", [])
+        if isinstance(warnings, list):
+            for warning in warnings:
+                if str(warning).strip():
+                    write_line(f"          warning: {warning}", use_color=False)
+
+    def command(self, event: CommandTraceEvent) -> None:
+        """Show the exact external command and its complete captured streams."""
+        if not self.enabled:
+            return
+        command = shlex.join(event.args)
+        if event.state == "started":
+            write_segments(
+                [("[verbose]", "cyan"), (f" command: {command}", "white")],
+                use_color=False,
+            )
+            if event.cwd:
+                write_line(f"          cwd: {event.cwd}", use_color=False)
+            return
+        if event.state != "completed" or event.result is None:
+            return
+        result = event.result
+        write_segments(
+            [
+                ("[verbose]", "cyan"),
+                (f" exit: {result.returncode} ({format_elapsed(result.elapsed_seconds)})", "white"),
+            ],
+            use_color=False,
+        )
+        _render_verbose_stream("stdout", result.stdout)
+        _render_verbose_stream("stderr", result.stderr)
+
+
+def _verbose_requested(params: dict[str, str]) -> bool:
+    """Return whether this recon run requested diagnostic execution output."""
+    return params.get("verbose", "").strip().lower() in {"1", "true", "yes", "on", "verbose"}
+
+
+def _verbose_step_label(step: PlanStep) -> str:
+    """Describe one plan step without hiding the inputs used to execute it."""
+    details = ", ".join(
+        f"{key}={value}"
+        for key, value in step.params.items()
+        if key != "verbose" and str(value).strip()
+    )
+    label = f"{step.tool}.{step.action}"
+    return f"{label} ({details})" if details else label
+
+
+def _render_verbose_stream(name: str, value: str) -> None:
+    """Render all captured output while keeping it visibly tied to one command."""
+    if not value.strip():
+        return
+    write_line(f"          {name}:", use_color=False)
+    for line in value.rstrip("\n").splitlines():
+        write_line(f"            {line}", use_color=False)
 
 
 def _progress_label(step: PlanStep) -> str:
