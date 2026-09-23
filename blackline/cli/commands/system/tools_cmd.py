@@ -32,7 +32,7 @@ def handle_tools(argument: str = "", *, use_color: bool | None = None) -> bool:
         _render_tool_list(tuple(tool.name for tool in recon_tools()), title="RECON TOOLS", use_color=use_color)
         return True
     if " " in query:
-        error("usage: tools [recon|<tool>|install <tool|all> [verbose]|uninstall <tool|all>]", use_color=use_color)
+        error("usage: tools [recon|<tool>|install <tool|all> [source] [verbose]|uninstall <tool|all>]", use_color=use_color)
         return False
     if query not in known_tool_names():
         error(f"unknown tool: {query}", use_color=use_color)
