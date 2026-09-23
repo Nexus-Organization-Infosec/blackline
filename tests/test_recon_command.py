@@ -14,9 +14,80 @@ from blackline.engine.executor import ExecutionProgress, StepResult
 from blackline.engine.planner import ExecutionPlan, PlanStep
 from blackline.engine.runner import RunResult
 from blackline.engine.context import ExecutionContext
+from blackline.utils.exec import CommandResult, CommandTraceEvent
 
 
 class ReconCommandTests(unittest.TestCase):
+    def test_handle_recon_verbose_shows_plan_commands_and_tool_output(self):
+        original_run_expression = recon_cmd.run_expression
+        context = ExecutionContext(
+            expression="recon[target=192.168.1.1,verbose]",
+            module="recon",
+            params={"target": "192.168.1.1", "verbose": "true"},
+        )
+        plan = ExecutionPlan(
+            context=context,
+            steps=(PlanStep(tool="nmap", action="port_scan", params={"target": "192.168.1.1"}),),
+        )
+        step_result = StepResult(
+            tool="nmap",
+            action="port_scan",
+            ok=True,
+            payload={
+                "target": "192.168.1.1",
+                "host_status": "up",
+                "ports": [],
+                "warnings": [],
+                "elapsed_seconds": 0.3,
+            },
+        )
+
+        def fake_run_expression(expression, session, **kwargs):
+            kwargs["plan_callback"](plan)
+            kwargs["progress_callback"](ExecutionProgress("started", 0, 1, plan.steps[0]))
+            kwargs["command_callback"](
+                CommandTraceEvent("started", ("/opt/homebrew/bin/nmap", "-Pn", "192.168.1.1"), 30.0)
+            )
+            kwargs["command_callback"](
+                CommandTraceEvent(
+                    "completed",
+                    ("/opt/homebrew/bin/nmap", "-Pn", "192.168.1.1"),
+                    30.0,
+                    result=CommandResult(
+                        args=("/opt/homebrew/bin/nmap", "-Pn", "192.168.1.1"),
+                        returncode=0,
+                        stdout="Nmap scan report",
+                        stderr="",
+                        elapsed_seconds=0.2,
+                    ),
+                )
+            )
+            kwargs["progress_callback"](ExecutionProgress("completed", 1, 1, plan.steps[0], step_result))
+            return RunResult(context=context, plan=plan, results=(step_result,))
+
+        recon_cmd.run_expression = fake_run_expression
+        output = io.StringIO()
+        try:
+            with redirect_stdout(output):
+                ok = recon_cmd.handle_recon("recon[target=192.168.1.1,verbose]", use_color=False)
+        finally:
+            recon_cmd.run_expression = original_run_expression
+
+        self.assertTrue(ok)
+        text = output.getvalue()
+        self.assertIn("[verbose] plan: 1 checks", text)
+        self.assertIn("running: nmap.port_scan (target=192.168.1.1)", text)
+        self.assertIn("command: /opt/homebrew/bin/nmap -Pn 192.168.1.1", text)
+        self.assertIn("exit: 0 (0.2s)", text)
+        self.assertIn("stdout:", text)
+        self.assertIn("Nmap scan report", text)
+        self.assertIn("finished: nmap.port_scan (target=192.168.1.1) -> complete (0.3s)", text)
+
+    def test_parse_expression_accepts_bare_recon_verbose_flag(self):
+        context = recon_cmd.parse_expression("recon[target=192.168.1.1,verbose]")
+
+        self.assertEqual(context.params["verbose"], "true")
+
     def test_progress_renderer_uses_stateful_checklist_without_percentages(self):
         class InteractiveOutput(io.StringIO):
             def isatty(self):
