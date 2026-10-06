@@ -71,7 +71,11 @@ def _render_tool_details(name: str, *, use_color: bool | None) -> None:
                 ("capability", recon_tool.capability),
                 ("provider", recon_tool.provider or "system/default"),
                 ("backend", recon_tool.backend),
+                ("lifecycle", recon_tool.lifecycle),
+                ("handler", recon_tool.handler),
                 ("strategies", ", ".join(recon_tool.strategies) or "all"),
+                ("timeout", f"{recon_tool.timeout_seconds:g}s" if recon_tool.timeout_seconds is not None else "none"),
+                ("dependencies", ", ".join(recon_tool.dependencies) or "none"),
                 ("produces", ", ".join(recon_tool.produces) or "none"),
                 ("consumes", ", ".join(recon_tool.consumes) or "none"),
             ]
