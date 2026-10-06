@@ -9,7 +9,8 @@ import shlex
 import sys
 from urllib.parse import urlsplit
 
-from blackline.cli.commands.system.jobs_cmd import append_job_result, derive_completion_state, step_completion_state
+from blackline.core.jobs import derive_completion_state, step_completion_state
+from blackline.storage.job_store import append_job_result
 from blackline.cli.ui.colors import colorize
 from blackline.config.tool_loader import get_tool_config
 from blackline.core.recon import InvalidReconTargetError, build_evidence_graph, build_recon_pipeline
@@ -17,6 +18,7 @@ from blackline.core.recon.outcomes import classify_result
 from blackline.cli.ui.display import error, result, warn, write_line, write_segments
 from blackline.engine.runner import normalize_expression, parse_expression, run_expression
 from blackline.engine.executor import ExecutionProgress
+from blackline.engine.models import ExecutionEvent
 from blackline.engine.planner import ExecutionPlan, PlanStep
 from blackline.engine.session import EngineSession
 from blackline.utils.exec import CommandTraceEvent
@@ -38,6 +40,7 @@ def handle_recon(
 
     progress = ReconProgressRenderer(use_color=use_color)
     verbose = ReconVerboseRenderer(enabled=_verbose_requested(parse_expression(expression).params))
+    structured_events_seen = False
 
     def show_plan(plan: ExecutionPlan) -> None:
         progress.show_plan(plan)
@@ -45,7 +48,17 @@ def handle_recon(
 
     def update_progress(event: ExecutionProgress) -> None:
         progress.update(event)
-        verbose.update(event)
+        if not structured_events_seen:
+            verbose.update(event)
+
+    def update_command(event: CommandTraceEvent) -> None:
+        if not structured_events_seen:
+            verbose.command(event)
+
+    def update_event(event: ExecutionEvent) -> None:
+        nonlocal structured_events_seen
+        structured_events_seen = True
+        verbose.event(event)
 
     run = run_expression(
         expression,
@@ -53,7 +66,8 @@ def handle_recon(
         plan_callback=show_plan,
         progress_callback=update_progress,
         vector_callback=lambda investigation_round: render_vector_round(investigation_round, use_color=use_color),
-        command_callback=verbose.command,
+        command_callback=update_command,
+        event_callback=update_event,
     )
     progress.finish(cancelled=run.cancelled)
     if not run.plan.steps:
@@ -311,6 +325,92 @@ class ReconVerboseRenderer:
         )
         _render_verbose_stream("stdout", result.stdout)
         _render_verbose_stream("stderr", result.stderr)
+
+    def event(self, event: ExecutionEvent) -> None:
+        """Render scheduler and subprocess activity from the unified stream."""
+        if not self.enabled:
+            return
+        if event.kind == "step.started":
+            write_segments(
+                [("[verbose]", "cyan"), (f" running: {_event_step_label(event)}", "white")],
+                use_color=False,
+            )
+            return
+        if event.kind == "step.retrying":
+            write_segments(
+                [
+                    ("[verbose]", "cyan"),
+                    (
+                        f" retrying: {_event_step_label(event)} "
+                        f"(attempt {event.data.get('next_attempt', '?')})",
+                        "white",
+                    ),
+                ],
+                use_color=False,
+            )
+            return
+        if event.kind in {"step.completed", "step.failed", "step.skipped"}:
+            outcome = _progress_display_state(str(event.data.get("outcome", "failed")))
+            payload = event.data.get("payload", {})
+            elapsed = _step_elapsed_seconds(payload if isinstance(payload, dict) else {})
+            label = _event_step_label(event)
+            write_segments(
+                [("[verbose]", "cyan"), (f" finished: {label} -> {outcome} ({format_elapsed(elapsed)})", "white")],
+                use_color=False,
+            )
+            error_message = str(event.data.get("error", ""))
+            if error_message:
+                write_line(f"          error: {error_message}", use_color=False)
+            if isinstance(payload, dict):
+                warnings = payload.get("warnings", [])
+                if isinstance(warnings, list):
+                    for warning in warnings:
+                        if str(warning).strip():
+                            write_line(f"          warning: {warning}", use_color=False)
+            return
+        if event.kind == "command.started":
+            args = event.data.get("args", [])
+            command = shlex.join(str(arg) for arg in args) if isinstance(args, list) else str(args)
+            write_segments(
+                [("[verbose]", "cyan"), (f" command: {command}", "white")],
+                use_color=False,
+            )
+            cwd = str(event.data.get("cwd", ""))
+            if cwd:
+                write_line(f"          cwd: {cwd}", use_color=False)
+            return
+        if event.kind == "command.completed":
+            result_data = event.data.get("result", {})
+            if not isinstance(result_data, dict):
+                return
+            elapsed = float(result_data.get("elapsed_seconds", 0.0) or 0.0)
+            write_segments(
+                [
+                    ("[verbose]", "cyan"),
+                    (f" exit: {result_data.get('returncode', '?')} ({format_elapsed(elapsed)})", "white"),
+                ],
+                use_color=False,
+            )
+            _render_verbose_stream("stdout", str(result_data.get("stdout", "")))
+            _render_verbose_stream("stderr", str(result_data.get("stderr", "")))
+
+
+def _event_step_label(event: ExecutionEvent) -> str:
+    step = event.data.get("step", {})
+    if not isinstance(step, dict):
+        return event.step_id
+    provider = str(step.get("provider", ""))
+    action = str(step.get("action", ""))
+    inputs = step.get("inputs", {})
+    details = ""
+    if isinstance(inputs, dict):
+        details = ", ".join(
+            f"{key}={value}"
+            for key, value in inputs.items()
+            if key != "verbose" and str(value).strip()
+        )
+    label = f"{provider}.{action}" if action else provider or event.step_id
+    return f"{label} ({details})" if details else label
 
 
 def _verbose_requested(params: dict[str, str]) -> bool:
@@ -1233,6 +1333,11 @@ def record_job_result(
     """Persist one structured recon result into the active job."""
     if not active_job:
         return
+    artifacts = [
+        artifact.to_dict()
+        for artifact in getattr(step, "artifacts", ())
+        if hasattr(artifact, "to_dict")
+    ]
 
     if getattr(step, "tool", "") == "dns":
         records = payload.get("records", {})
@@ -1253,6 +1358,7 @@ def record_job_result(
                 "elapsed_seconds": payload.get("elapsed_seconds"),
             },
             "payload": payload,
+            "artifacts": artifacts,
         }
         append_job_result(active_job, entry, jobs_root=jobs_root)
         return
@@ -1273,6 +1379,7 @@ def record_job_result(
                 "elapsed_seconds": payload.get("elapsed_seconds"),
             },
             "payload": payload,
+            "artifacts": artifacts,
         }
         append_job_result(active_job, entry, jobs_root=jobs_root)
         return
@@ -1295,6 +1402,7 @@ def record_job_result(
                 "elapsed_seconds": payload.get("elapsed_seconds"),
             },
             "payload": payload,
+            "artifacts": artifacts,
         }
         append_job_result(active_job, entry, jobs_root=jobs_root)
         return
@@ -1316,6 +1424,7 @@ def record_job_result(
                 "elapsed_seconds": payload.get("elapsed_seconds"),
             },
             "payload": payload,
+            "artifacts": artifacts,
         }
         append_job_result(active_job, entry, jobs_root=jobs_root)
         return
@@ -1338,6 +1447,7 @@ def record_job_result(
                 "elapsed_seconds": payload.get("elapsed_seconds"),
             },
             "payload": payload,
+            "artifacts": artifacts,
         }
         append_job_result(active_job, entry, jobs_root=jobs_root)
         return
@@ -1360,6 +1470,7 @@ def record_job_result(
                 "elapsed_seconds": payload.get("elapsed_seconds"),
             },
             "payload": payload,
+            "artifacts": artifacts,
         }
         append_job_result(active_job, entry, jobs_root=jobs_root)
         return
@@ -1383,6 +1494,7 @@ def record_job_result(
             "elapsed_seconds": payload.get("elapsed_seconds"),
         },
         "payload": payload,
+        "artifacts": artifacts,
     }
     append_job_result(active_job, entry, jobs_root=jobs_root)
 
