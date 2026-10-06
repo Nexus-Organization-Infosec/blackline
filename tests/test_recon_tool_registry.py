@@ -13,8 +13,15 @@ from blackline.cli.commands.system.tools_cmd import handle_tools
 from blackline.cli.commands.utils.shell_cmds import ShellState
 from blackline.cli.dispatcher import dispatch_command
 from blackline.core.recon.pipeline import build_recon_pipeline
-from blackline.core.recon.tool_registry import get_recon_tool, providers_for, set_recon_tool_enabled
+from blackline.core.recon.tool_registry import (
+    get_recon_tool,
+    providers_for,
+    providers_for_capability,
+    set_recon_tool_enabled,
+    validate_recon_tool_registry,
+)
 from blackline.core.recon.tool_registry import check_recon_tool
+from blackline.engine.handlers import default_handler_registry
 from blackline.pathfinder import ToolResolution
 from blackline.utils.tab_complete import completion_items
 
@@ -24,13 +31,21 @@ class ReconToolRegistryTests(unittest.TestCase):
         naabu = get_recon_tool("naabu")
 
         self.assertIsNotNone(naabu)
-        self.assertEqual(naabu.capability, "port-discovery")
-        self.assertEqual(naabu.produces, ("host.port",))
+        self.assertEqual(naabu.capability, "network.port_discover")
+        self.assertEqual(naabu.produces, ("host.port", "scan.port_discovery"))
         self.assertEqual([tool.name for tool in providers_for("host.port")], ["naabu", "nmap"])
+        self.assertEqual([tool.name for tool in providers_for_capability("http.fingerprint")], ["fingerprint", "whatweb"])
         smbclient = get_recon_tool("smbclient")
         self.assertIsNotNone(smbclient)
-        self.assertEqual(smbclient.capability, "smb-share-enumeration")
+        self.assertEqual(smbclient.capability, "smb.enumerate")
         self.assertEqual(smbclient.produces, ("smb.share",))
+        self.assertEqual(get_recon_tool("reverse_dns").lifecycle, "planned")
+        self.assertEqual(get_recon_tool("traceroute").lifecycle, "planned")
+
+    def test_registry_is_valid_and_every_provider_has_a_handler(self):
+        handlers = default_handler_registry()
+
+        self.assertEqual(validate_recon_tool_registry(handler_names=handlers.names), ())
 
     def test_top_level_tools_listing_and_inspection_are_registry_backed(self):
         output = io.StringIO()
@@ -41,7 +56,7 @@ class ReconToolRegistryTests(unittest.TestCase):
         text = output.getvalue()
         self.assertIn("RECON TOOLS", text)
         self.assertIn("naabu", text)
-        self.assertIn("port-discovery", text)
+        self.assertIn("network.port_discover", text)
         self.assertIn("NAABU", text)
         self.assertIn("produces", text)
         self.assertIn("installed", text)
