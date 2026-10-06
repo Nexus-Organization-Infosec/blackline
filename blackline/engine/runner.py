@@ -9,6 +9,7 @@ from typing import Callable
 from blackline.core.recon.pipeline import build_recon_pipeline
 from blackline.core.recon.outcomes import outcome_is_success
 from blackline.engine.executor import ExecutionControl, ExecutionProgress, StepResult, execute_plan
+from blackline.engine.events import ExecutionEventCallback
 from blackline.engine.planner import ExecutionPlan, build_essential_recon_plan, build_plan
 from blackline.engine.context import ExecutionContext
 from blackline.engine.session import EngineSession
@@ -40,6 +41,7 @@ def run_expression(
     progress_callback: Callable[[ExecutionProgress], None] | None = None,
     vector_callback: Callable[[object], None] | None = None,
     command_callback: CommandTraceCallback | None = None,
+    event_callback: ExecutionEventCallback | None = None,
 ) -> RunResult:
     """Parse, plan, and execute one expression."""
     session = session or EngineSession()
@@ -54,6 +56,7 @@ def run_expression(
             progress_callback=progress_callback,
             vector_callback=vector_callback,
             command_callback=command_callback,
+            event_callback=event_callback,
         )
     plan = build_plan(context)
     if plan_callback is not None:
@@ -65,6 +68,7 @@ def run_expression(
         control=control,
         progress_callback=progress_callback,
         command_callback=command_callback,
+        event_callback=event_callback,
     )
     session.runs.append(expression)
     return RunResult(
@@ -86,6 +90,7 @@ def _run_recon_iteratively(
     progress_callback: Callable[[ExecutionProgress], None] | None,
     vector_callback: Callable[[object], None] | None,
     command_callback: CommandTraceCallback | None,
+    event_callback: ExecutionEventCallback | None,
 ) -> RunResult:
     """Execute essential discovery, then let Vector create bounded follow-ups."""
     from blackline.core.recon.vector_adapter import (
@@ -108,6 +113,7 @@ def _run_recon_iteratively(
             control=control,
             progress_callback=progress_callback,
             command_callback=command_callback,
+            event_callback=event_callback,
         )
     )
     vector = create_recon_vector(context)
@@ -138,6 +144,7 @@ def _run_recon_iteratively(
             control=control,
             progress_callback=progress_callback,
             command_callback=command_callback,
+            event_callback=event_callback,
         )
         all_steps.extend(followup_plan.steps)
         all_results.extend(latest_results)
