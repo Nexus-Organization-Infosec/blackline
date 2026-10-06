@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 import json
-import random
-import string
-from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 
@@ -14,28 +11,26 @@ from blackline.cli.commands.utils.shell_cmds import ShellState
 from blackline.cli.ui.display import error, info, result, write_line, write_segments
 from blackline.config.tool_loader import load_tools_config
 from blackline.core.recon import InvalidReconTargetError, build_recon_pipeline
-from blackline.core.recon.outcomes import classify_result, completion_state_for
+from blackline.core.jobs import (
+    Job,
+    build_job_summary,
+    derive_completion_state,
+    job_summary,
+    normalize_job_id,
+    step_completion_state,
+)
+from blackline.storage.job_store import (
+    append_job_result,
+    default_jobs_root,
+    generate_job_id,
+    list_job_ids,
+    list_jobs,
+    load_job,
+    repository,
+    save_job,
+)
 
-ID_ALPHABET = string.ascii_uppercase + string.digits
 MANUAL_MODULE = "manual"
-COMPLETION_STATES = {"initialized", "completed", "completed_with_warnings", "partial", "failed"}
-
-
-@dataclass(frozen=True, slots=True)
-class Job:
-    """Structured record of execution context and results."""
-
-    id: str
-    module: str
-    params: dict[str, str]
-    created: str
-    status: str = "initialized"
-    target: str = ""
-    target_type: str = ""
-    steps: list[dict[str, object]] = field(default_factory=list)
-    summary: dict[str, object] = field(default_factory=dict)
-    ipintel: dict[str, object] = field(default_factory=dict)
-    results: list[dict[str, object]] = field(default_factory=list)
 
 
 def handle_new(
@@ -85,7 +80,7 @@ def handle_new(
         created=created,
         target=target,
         target_type=target_type,
-        summary=_build_job_summary(target=target, target_type=target_type, steps=(), legacy_results=()),
+        summary=build_job_summary(target=target, target_type=target_type, steps=(), legacy_results=()),
     )
     save_job(job, jobs_root)
     state.active_job = identifier
@@ -343,13 +338,11 @@ def handle_delete_job(
 
     deleted: list[str] = []
     missing: list[str] = []
+    job_repository = repository(jobs_root)
     for identifier in identifiers:
-        path = jobs_root / f"{identifier}.json"
-        if not path.exists():
+        if not job_repository.delete(identifier):
             missing.append(identifier)
             continue
-
-        path.unlink()
         deleted.append(identifier)
 
     if state.active_job in deleted:
@@ -406,7 +399,7 @@ def parse_job_expression(expression: str) -> tuple[str, dict[str, str]] | None:
 
 def render_job(job: Job, *, use_color: bool | None = None) -> None:
     """Render a compact job summary."""
-    summary = _job_summary(job)
+    summary = job_summary(job)
     write_line("[job]", use_color=use_color)
     write_line(use_color=use_color)
     _job_row("id", f"#{job.id}", value_color="cyan", use_color=use_color)
@@ -443,123 +436,6 @@ def render_job(job: Job, *, use_color: bool | None = None) -> None:
     write_line(use_color=use_color)
 
 
-def save_job(job: Job, jobs_root: Path) -> Path:
-    """Persist a job as JSON."""
-    path = jobs_root / f"{job.id}.json"
-    path.write_text(json.dumps(asdict(job), indent=2) + "\n", encoding="utf-8")
-    return path
-
-
-def append_job_result(identifier: str, entry: dict[str, object], jobs_root: Path | None = None) -> bool:
-    """Append one structured result entry to a persisted job."""
-    jobs_root = jobs_root or default_jobs_root()
-    job = load_job(identifier, jobs_root)
-    if job is None:
-        return False
-
-    entry = dict(entry)
-    entry.setdefault("outcome", _step_outcome_from_entry(entry))
-    step = _normalize_step_entry(entry)
-    steps = [*job.steps, step]
-    summary = _build_job_summary(
-        target=job.target,
-        target_type=job.target_type,
-        steps=steps,
-        legacy_results=[*job.results, entry],
-    )
-    updated = Job(
-        id=job.id,
-        module=job.module,
-        params=job.params,
-        created=job.created,
-        status=_derive_job_status(steps),
-        target=job.target,
-        target_type=job.target_type,
-        steps=steps,
-        summary=summary,
-        ipintel=_updated_ipintel(job.ipintel, entry),
-        results=[*job.results, entry],
-    )
-    save_job(updated, jobs_root)
-    return True
-
-
-def step_completion_state(*, tool: str, ok: bool, payload: dict[str, object], outcome: str = "") -> str:
-    """Return the normalized completion state for one executed recon step."""
-    result_outcome = outcome or classify_result(tool=tool, ok=ok, payload=payload)
-    return completion_state_for(result_outcome)
-
-
-def derive_completion_state(statuses: list[str]) -> str:
-    """Return the aggregate completion state for a sequence of step states."""
-    if not statuses:
-        return "initialized"
-
-    if all(status == "completed" for status in statuses):
-        return "completed"
-    if any(status == "failed" for status in statuses):
-        if any(status in {"completed", "completed_with_warnings", "partial"} for status in statuses):
-            return "partial"
-        return "failed"
-    if any(status == "partial" for status in statuses):
-        return "partial"
-    if any(status == "completed_with_warnings" for status in statuses):
-        return "completed_with_warnings"
-    return "initialized"
-
-
-def load_job(identifier: str, jobs_root: Path) -> Job | None:
-    """Load one persisted job."""
-    path = jobs_root / f"{normalize_job_id(identifier)}.json"
-    if not path.exists():
-        return None
-
-    data = json.loads(path.read_text(encoding="utf-8"))
-    params = {str(key): str(value) for key, value in _mapping(data.get("params")).items()}
-    target = str(data.get("target", "")) or params.get("target", "")
-    target_type = str(data.get("target_type", "")) or _infer_target_type(target)
-    legacy_results = _list_of_dicts(data.get("results"))
-    steps = _list_of_dicts(data.get("steps")) or _legacy_steps_from_results(legacy_results)
-    summary = _mapping(data.get("summary")) or _build_job_summary(
-        target=target,
-        target_type=target_type,
-        steps=steps,
-        legacy_results=legacy_results,
-    )
-    status = str(data.get("status", "initialized"))
-    if status not in COMPLETION_STATES:
-        status = "initialized"
-    if status == "initialized" and steps:
-        status = _derive_job_status(steps)
-
-    return Job(
-        id=str(data.get("id", "")),
-        module=str(data.get("module", "")),
-        params=params,
-        created=str(data.get("created", "")),
-        status=status,
-        target=target,
-        target_type=target_type,
-        steps=steps,
-        summary=summary,
-        ipintel=_mapping(data.get("ipintel")),
-        results=legacy_results,
-    )
-
-
-def list_jobs(jobs_root: Path | None = None) -> list[Job]:
-    """Return persisted jobs sorted by id."""
-    jobs_root = jobs_root or default_jobs_root()
-    if not jobs_root.exists():
-        return []
-    return [job for path in sorted(jobs_root.glob("*.json")) if (job := load_job(path.stem, jobs_root))]
-
-
-def list_job_ids(jobs_root: Path | None = None) -> list[str]:
-    """Return persisted job ids."""
-    return [job.id for job in list_jobs(jobs_root)]
-
-
 def parse_delete_targets(expression: str, jobs_root: Path | None = None) -> list[str]:
     """Parse delete targets from comma-separated ids or '*'."""
     expression = expression.strip()
@@ -576,14 +452,6 @@ def parse_delete_targets(expression: str, jobs_root: Path | None = None) -> list
     return targets
 
 
-def generate_job_id(jobs_root: Path) -> str:
-    """Generate a short human-readable job id."""
-    while True:
-        identifier = "".join(random.choice(ID_ALPHABET) for _ in range(4))
-        if not (jobs_root / f"{identifier}.json").exists():
-            return identifier
-
-
 def available_modules() -> set[str]:
     """Return modules that can be used to create jobs."""
     modules: set[str] = set()
@@ -592,11 +460,6 @@ def available_modules() -> set[str]:
             modules.update(item.name for item in group.items)
     modules.update(_configured_tool_modules())
     return modules
-
-
-def normalize_job_id(identifier: str) -> str:
-    """Normalize user-entered job identifiers."""
-    return identifier.strip().upper().removeprefix("#")
 
 
 def _configured_tool_modules() -> set[str]:
@@ -614,214 +477,8 @@ def _configured_tool_modules() -> set[str]:
     return modules
 
 
-def default_jobs_root() -> Path:
-    """Return the default job storage path."""
-    return Path(__file__).resolve().parents[3] / "storage" / "jobs"
-
-
-def _normalize_step_entry(entry: dict[str, object]) -> dict[str, object]:
-    if "name" in entry and "status" in entry and "provenance" in entry:
-        return dict(entry)
-
-    payload = _mapping(entry.get("payload"))
-    results = payload.get("ports")
-    if not isinstance(results, list):
-        results = []
-    summary = _mapping(entry.get("summary"))
-    recorded_at = str(entry.get("recorded_at", datetime.now().isoformat(timespec="seconds")))
-    tool = str(entry.get("tool", ""))
-    status = _step_status_from_entry(entry)
-    outcome = _step_outcome_from_entry(entry)
-    command = payload.get("command", [])
-    command_text = " ".join(str(item) for item in command) if isinstance(command, list) else str(command)
-
-    return {
-        "name": _step_name(tool, str(entry.get("action", ""))),
-        "status": status,
-        "outcome": outcome,
-        "error": str(entry.get("error", "")),
-        "command": command_text,
-        "summary": summary,
-        "results": [item for item in results if isinstance(item, dict)],
-        "raw_output": str(payload.get("raw_output", "")),
-        "provenance": {
-            "tool": tool,
-            "timestamp": recorded_at,
-            "confidence": str(entry.get("confidence", "")),
-        },
-    }
-
-
-def _legacy_steps_from_results(results: list[dict[str, object]]) -> list[dict[str, object]]:
-    return [_normalize_step_entry(entry) for entry in results]
-
-
-def _derive_job_status(steps: list[dict[str, object]]) -> str:
-    return derive_completion_state([str(step.get("status", "initialized")) for step in steps])
-
-
-def _step_status_from_entry(entry: dict[str, object]) -> str:
-    payload = _mapping(entry.get("payload"))
-    return step_completion_state(
-        tool=str(entry.get("tool", "")),
-        ok=bool(entry.get("ok", False)),
-        payload=payload,
-        outcome=str(entry.get("outcome", "")),
-    )
-
-
-def _step_outcome_from_entry(entry: dict[str, object]) -> str:
-    payload = _mapping(entry.get("payload"))
-    return str(entry.get("outcome", "")).strip() or classify_result(
-        tool=str(entry.get("tool", "")),
-        ok=bool(entry.get("ok", False)),
-        payload=payload,
-        error=str(entry.get("error", "")),
-    )
-
-
-def _step_name(tool: str, action: str) -> str:
-    if tool == "nmap":
-        return "port_scan"
-    if action:
-        return action
-    if tool:
-        return tool
-    return "step"
-
-
-def _build_job_summary(
-    *,
-    target: str,
-    target_type: str,
-    steps: tuple[dict[str, object], ...] | list[dict[str, object]],
-    legacy_results: tuple[dict[str, object], ...] | list[dict[str, object]],
-) -> dict[str, object]:
-    step_list = list(steps)
-    summary: dict[str, object] = {
-        "step_count": len(step_list),
-        "result_count": _count_job_results(step_list, list(legacy_results)),
-    }
-    if target:
-        summary["target"] = target
-    if target_type:
-        summary["target_type"] = target_type
-
-    open_ports = 0
-    filtered_ports = 0
-    elapsed_seconds = 0.0
-    host_status = ""
-    completed_steps = 0
-    negative_steps = 0
-    skipped_steps = 0
-    warning_steps = 0
-    failed_steps = 0
-    for step in step_list:
-        step_status = str(step.get("status", "initialized"))
-        outcome = str(step.get("outcome", "done"))
-        if step_status == "completed":
-            if outcome == "negative":
-                negative_steps += 1
-            elif outcome == "skipped":
-                skipped_steps += 1
-            else:
-                completed_steps += 1
-        elif step_status == "completed_with_warnings":
-            warning_steps += 1
-        elif step_status == "failed":
-            failed_steps += 1
-
-        for result_item in step.get("results", []):
-            if not isinstance(result_item, dict):
-                continue
-            state = str(result_item.get("state", "")).lower()
-            if state == "open":
-                open_ports += 1
-            elif state == "filtered":
-                filtered_ports += 1
-
-        step_summary = _mapping(step.get("summary"))
-        if step_summary.get("host_status"):
-            host_status = str(step_summary.get("host_status", ""))
-        if isinstance(step_summary.get("elapsed_seconds"), (int, float)):
-            elapsed_seconds += float(step_summary.get("elapsed_seconds", 0.0))
-
-    if open_ports:
-        summary["open_ports"] = open_ports
-    if filtered_ports:
-        summary["filtered_ports"] = filtered_ports
-    if host_status:
-        summary["host_status"] = host_status
-    if elapsed_seconds > 0:
-        summary["elapsed_seconds"] = elapsed_seconds
-    if completed_steps:
-        summary["completed_steps"] = completed_steps
-    if negative_steps:
-        summary["negative_steps"] = negative_steps
-    if skipped_steps:
-        summary["skipped_steps"] = skipped_steps
-    if warning_steps:
-        summary["warning_steps"] = warning_steps
-    if failed_steps:
-        summary["failed_steps"] = failed_steps
-    return summary
-
-
-def _job_summary(job: Job) -> dict[str, object]:
-    return job.summary or _build_job_summary(
-        target=job.target,
-        target_type=job.target_type,
-        steps=job.steps,
-        legacy_results=job.results,
-    )
-
-
-def _count_job_results(steps: list[dict[str, object]], legacy_results: list[dict[str, object]]) -> int:
-    count = sum(1 for step in steps if step.get("results") or step.get("summary") or step.get("error"))
-    if count:
-        return count
-    return len(legacy_results)
-
-
-def _updated_ipintel(current: dict[str, object], entry: dict[str, object]) -> dict[str, object]:
-    if str(entry.get("tool", "")) != "ipintel":
-        return current
-    payload = _mapping(entry.get("payload"))
-    return {
-        "lookup_ip": payload.get("lookup_ip", ""),
-        "asn": payload.get("asn", ""),
-        "org": payload.get("org", ""),
-        "domain": payload.get("domain", ""),
-        "location": payload.get("location", ""),
-        "latency": payload.get("latency"),
-        "vpn_likely": payload.get("vpn_likely"),
-        "confidence": payload.get("confidence", ""),
-        "jitter": payload.get("jitter"),
-        "bandwidth": payload.get("bandwidth"),
-        "mss": payload.get("mss"),
-        "trace": payload.get("trace", []),
-        "provider": payload.get("provider", ""),
-        "raw": payload.get("raw", {}),
-    }
-
-
-def _infer_target_type(target: str) -> str:
-    if not target:
-        return ""
-    try:
-        return build_recon_pipeline(target).target.target_type
-    except InvalidReconTargetError:
-        return ""
-
-
 def _mapping(value: object) -> dict[str, object]:
     return value if isinstance(value, dict) else {}
-
-
-def _list_of_dicts(value: object) -> list[dict[str, object]]:
-    if not isinstance(value, list):
-        return []
-    return [item for item in value if isinstance(item, dict)]
 
 
 def _format_elapsed(seconds: float) -> str:
