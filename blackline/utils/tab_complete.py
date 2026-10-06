@@ -13,7 +13,7 @@ except ImportError:  # pragma: no cover - readline is Unix-only.
 
 from blackline.config.tool_loader import get_tool_config
 from blackline.cli.commands.system.help_cmd import load_help_groups, load_operators
-from blackline.cli.commands.system.jobs_cmd import list_jobs
+from blackline.storage.job_store import list_jobs
 from blackline.templates import TemplateRegistry
 from blackline.tools.installer import installable_tool_groups, installable_tool_names
 from blackline.cli.commands.system.tools_cmd import known_tool_names
