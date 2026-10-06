@@ -1,23 +1,6 @@
 {
   "tools": {
     "recon": {
-      "engine": {
-        "runner": "nmap"
-      },
-      "execution_control": {
-        "timeouts": {
-          "dns_seconds": 15,
-          "ipintel_seconds": 30,
-          "http_seconds": 10,
-          "http_fingerprint_seconds": 10,
-          "katana_seconds": 30,
-          "tls_seconds": 10,
-          "rdap_seconds": 10,
-          "naabu_seconds": 90,
-          "smbclient_seconds": 15,
-          "port_scan_seconds": 0
-        }
-      },
       "arguments": {
         "target": {
           "description": "target ip or domain"
