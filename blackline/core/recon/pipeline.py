@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from blackline.core.recon.models import ReconStep, ReconTarget, normalize_recon_target
-from blackline.core.recon.tool_registry import is_recon_tool_enabled
+from blackline.core.recon.tool_registry import get_recon_tool, is_recon_tool_enabled, tool_supports_strategy
 from blackline.core.recon.steps.dns import dns_step
 from blackline.core.recon.steps.http import http_ip_probe_step, http_probe_step, httpx_probe_step
 from blackline.core.recon.steps.ipintel import ipintel_step
@@ -19,17 +19,7 @@ from blackline.core.recon.steps.tls import tls_inspection_step
 from blackline.core.recon.steps.sslyze import sslyze_step
 from blackline.core.recon.steps.web_fingerprint import web_fingerprint_step, whatweb_fingerprint_step
 
-PROFILE_TOOLS: dict[str, frozenset[str]] = {
-    # Surface and fast still take a deliberately bounded Nmap snapshot.
-    "surface": frozenset({"dns", "subfinder", "http", "httpx", "fingerprint", "whatweb", "katana", "tls", "sslyze", "rdap", "rpcinfo", "naabu", "nmap"}),
-    "fast": frozenset({"dns", "subfinder", "http", "httpx", "fingerprint", "whatweb", "katana", "tls", "sslyze", "rdap", "rpcinfo", "naabu", "nmap"}),
-    # These profiles keep Blackline's independent evidence layers available.
-    "balanced": frozenset({"dns", "subfinder", "ipintel", "http", "httpx", "fingerprint", "whatweb", "katana", "tls", "sslyze", "rdap", "rpcinfo", "naabu", "nmap"}),
-    "quiet": frozenset({"dns", "subfinder", "ipintel", "http", "httpx", "fingerprint", "whatweb", "katana", "tls", "sslyze", "rdap", "rpcinfo", "naabu", "nmap"}),
-    "deep": frozenset({"dns", "subfinder", "ipintel", "http", "httpx", "fingerprint", "whatweb", "katana", "tls", "sslyze", "rdap", "rpcinfo", "naabu", "nmap"}),
-    "udp": frozenset({"dns", "subfinder", "ipintel", "http", "httpx", "fingerprint", "whatweb", "katana", "tls", "sslyze", "rdap", "rpcinfo", "nmap"}),
-}
-PROFILE_TOOLS["auto"] = PROFILE_TOOLS["balanced"]
+RECON_PROFILES = frozenset({"surface", "fast", "balanced", "quiet", "deep", "udp", "auto"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,13 +95,17 @@ def _steps_for_target(target: ReconTarget, params: dict[str, str]) -> tuple[Reco
 def recon_profile_name(params: dict[str, str]) -> str:
     """Return the evidence-selection profile; Nmap details live in scan policy."""
     requested = params.get("strategy", "").strip().lower()
-    return requested if requested in PROFILE_TOOLS else "balanced"
+    return requested if requested in RECON_PROFILES else "balanced"
 
 
 def _select_profile_steps(steps: tuple[ReconStep, ...], profile: str) -> tuple[ReconStep, ...]:
-    enabled_tools = PROFILE_TOOLS[profile]
     return tuple(
         step
         for step in steps
-        if step.tool == "reverse_dns" or (step.tool in enabled_tools and is_recon_tool_enabled(step.tool))
+        if step.tool == "reverse_dns" or _provider_enabled_for_profile(step.tool, profile)
     )
+
+
+def _provider_enabled_for_profile(name: str, profile: str) -> bool:
+    provider = get_recon_tool(name)
+    return bool(provider and provider.lifecycle == "active" and is_recon_tool_enabled(name) and tool_supports_strategy(provider, profile))
