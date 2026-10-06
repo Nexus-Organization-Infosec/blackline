@@ -1,77 +1,24 @@
-"""Task executor."""
+"""Registered step dispatch and the public plan-execution facade."""
 
 from __future__ import annotations
 
-from concurrent.futures import Future, ThreadPoolExecutor
-from contextvars import copy_context
-from dataclasses import dataclass
 from typing import Callable
 
-from blackline.config.tool_loader import get_tool_config
-from blackline.core.recon.outcomes import classify_result, outcome_is_success
-from blackline.core.recon.steps.port_scan import port_state_counts
-from blackline.engine.planner import ExecutionPlan, PlanStep
-from blackline.tools.intel.yougotmapped import resolve_ipintel
-from blackline.tools.intel.rdap import resolve_rdap
-from blackline.tools.dns.resolver import resolve_dns
-from blackline.tools.dns.subfinder import enumerate_subdomains
-from blackline.tools.http.client import probe_http
-from blackline.tools.http.fingerprint import fingerprint_http
-from blackline.tools.http.httpx import discover_http_services, probe_httpx
-from blackline.tools.http.katana import crawl_with_katana
-from blackline.tools.http.whatweb import fingerprint_with_whatweb
-from blackline.tools.network.nmap import NmapRequest, display_command, execute_nmap
-from blackline.tools.network.naabu import scan_ports_with_naabu
-from blackline.tools.network.rpcinfo import query_rpcinfo
-from blackline.tools.network.smbclient import enumerate_smb_shares
-from blackline.tools.tls.inspector import inspect_tls
-from blackline.tools.tls.sslyze import inspect_tls_configuration
+from blackline.core.artifacts import ArtifactStore
+from blackline.core.recon.tool_registry import get_recon_tool
+from blackline.engine.events import EventEmitter, ExecutionEventCallback, command_event_callback
+from blackline.engine.handlers import HandlerRegistry, default_handler_registry
+from blackline.engine.handlers.base import HandlerContext
+from blackline.engine.models import ExecutionPlan, PlanStep, StepResult
+from blackline.engine.scheduler import (
+    ExecutionControl,
+    ExecutionProgress,
+    SchedulerOptions,
+    schedule_plan,
+)
 from blackline.utils.exec import CommandResult, CommandTraceCallback, trace_commands
 
-
-@dataclass(frozen=True, slots=True)
-class StepResult:
-    """Outcome of one executed plan step."""
-
-    tool: str
-    action: str
-    ok: bool
-    payload: dict
-    error: str = ""
-    outcome: str = ""
-
-    def __post_init__(self) -> None:
-        """Attach one canonical outcome and make negative observations successful."""
-        payload = dict(self.payload)
-        outcome = self.outcome or classify_result(tool=self.tool, ok=self.ok, payload=payload, error=self.error)
-        payload.setdefault("result_outcome", outcome)
-        object.__setattr__(self, "payload", payload)
-        object.__setattr__(self, "outcome", outcome)
-        if outcome_is_success(outcome) and not self.ok:
-            object.__setattr__(self, "ok", True)
-
-
-@dataclass(frozen=True, slots=True)
-class ExecutionProgress:
-    """One lifecycle update emitted while a plan is executing."""
-
-    state: str
-    completed: int
-    total: int
-    step: PlanStep
-    result: StepResult | None = None
-
-
-@dataclass(slots=True)
-class ExecutionControl:
-    """Mutable execution control state for one plan run."""
-
-    cancelled: bool = False
-    cancellation_reason: str = ""
-
-    def cancel(self, reason: str = "recon cancelled by user") -> None:
-        self.cancelled = True
-        self.cancellation_reason = reason
+_DEFAULT_HANDLERS = default_handler_registry()
 
 
 def execute_plan(
@@ -81,794 +28,68 @@ def execute_plan(
     control: ExecutionControl | None = None,
     progress_callback: Callable[[ExecutionProgress], None] | None = None,
     command_callback: CommandTraceCallback | None = None,
+    event_callback: ExecutionEventCallback | None = None,
+    handler_registry: HandlerRegistry | None = None,
+    scheduler_options: SchedulerOptions | None = None,
 ) -> tuple[StepResult, ...]:
-    """Execute each step in the given plan."""
-    indexed_steps = tuple(enumerate(plan.steps))
-    result_slots: list[StepResult | None] = [None] * len(indexed_steps)
-    runtime_state: dict[str, object] = {}
+    """Execute a plan through bounded scheduling and registered handlers."""
+    plan.validate()
     control = control or ExecutionControl()
-    completed = 0
-    with trace_commands(command_callback):
-        for group in _plan_step_groups(indexed_steps):
-            if control.cancelled:
-                break
-            for _, step in group:
-                _emit_progress(progress_callback, "started", completed, len(indexed_steps), step)
-            group_results = _execute_step_group(
-                group,
+    registry = handler_registry or _DEFAULT_HANDLERS
+    artifacts = ArtifactStore()
+    emitter = EventEmitter(event_callback, job_id=str(getattr(plan.context, "job_id", "")))
+
+    def dispatch(step: PlanStep, evidence: ArtifactStore) -> StepResult:
+        callback = command_event_callback(emitter, step, command_callback)
+        with trace_commands(callback):
+            return execute_step(
+                step,
                 command_executor=command_executor,
-                runtime_state=runtime_state,
-                control=control,
+                artifact_store=evidence,
+                handler_registry=registry,
             )
-            for index, result in group_results:
-                _update_runtime_state(runtime_state, result)
-                result_slots[index] = result
-                completed += 1
-                _emit_progress(progress_callback, "completed", completed, len(indexed_steps), plan.steps[index], result)
-    return tuple(result for result in result_slots if result is not None)
 
-
-def _emit_progress(
-    callback: Callable[[ExecutionProgress], None] | None,
-    state: str,
-    completed: int,
-    total: int,
-    step: PlanStep,
-    result: StepResult | None = None,
-) -> None:
-    """Safely emit optional execution lifecycle information."""
-    if callback is None:
-        return
-    callback(ExecutionProgress(state, completed, total, step, result))
+    return schedule_plan(
+        plan,
+        dispatch,
+        control=control,
+        artifact_store=artifacts,
+        emitter=emitter,
+        options=scheduler_options or SchedulerOptions(),
+        progress_callback=progress_callback,
+    )
 
 
 def execute_step(
     step: PlanStep,
     *,
     command_executor: Callable[[tuple[str, ...]], CommandResult] | None = None,
-    runtime_state: dict[str, object] | None = None,
+    artifact_store: ArtifactStore | None = None,
+    handler_registry: HandlerRegistry | None = None,
 ) -> StepResult:
-    """Execute one supported plan step."""
-    timeout_seconds = _step_timeout_seconds(step.tool)
-
-    if step.tool == "dns":
-        lookup = _resolve_dns_step(
-            step.params.get("host", "") or step.params.get("target", ""),
-            command_executor=command_executor,
-            timeout_seconds=timeout_seconds,
-        )
-        payload = {
-            "target": step.params.get("target", ""),
-            "host": lookup.host,
-            "records": dict(lookup.records),
-            "resolved_ips": list(lookup.resolved_ips),
-            "provider": lookup.provider,
-            "outcome": getattr(lookup, "outcome", ""),
-            "negative_observation": getattr(lookup, "outcome", "") in {"no_data", "nxdomain"},
-            "raw_output": lookup.raw_output,
-            "elapsed_seconds": lookup.elapsed_seconds,
+    """Resolve and execute one provider without tool-specific branching."""
+    evidence = artifact_store if artifact_store is not None else ArtifactStore()
+    missing_artifacts = sorted(
+        {
+            kind
+            for dependency in step.depends_on
+            if not dependency.optional
+            for kind in dependency.required_artifacts
+            if not evidence.has(kind)
         }
+    )
+    if missing_artifacts:
+        reason = f"missing required artifacts: {', '.join(missing_artifacts)}"
         return StepResult(
-            tool=step.tool,
-            action=step.action,
-            ok=lookup.ok,
-            payload=payload,
-            error=lookup.error,
+            step.tool,
+            step.action,
+            False,
+            {"skipped": True, "skip_reason": reason},
+            reason,
         )
-
-    if step.tool == "subfinder":
-        result = enumerate_subdomains(
-            step.params.get("domain", "") or step.params.get("target", ""),
-            executor=command_executor,
-            timeout_seconds=timeout_seconds,
-        )
-        payload = {
-            "target": step.params.get("target", ""),
-            "domain": result.domain,
-            "subdomains": [
-                {"host": finding.host, "sources": list(finding.sources)}
-                for finding in result.subdomains
-            ],
-            "provider": "subfinder",
-            "skipped": result.skipped,
-            "negative_observation": result.negative_observation,
-            "raw_output": result.raw_output,
-            "elapsed_seconds": result.elapsed_seconds,
-        }
-        return StepResult(
-            tool=step.tool,
-            action=step.action,
-            ok=result.ok,
-            payload=payload,
-            error=result.error,
-        )
-
-    if step.tool == "ipintel":
-        runtime_state = runtime_state or {}
-        resolved_ips = runtime_state.get("resolved_ips", [])
-        if not isinstance(resolved_ips, list):
-            resolved_ips = []
-        lookup_ip = str(step.params.get("host", ""))
-        target_type = str(step.params.get("target_type", "")).lower()
-        if target_type != "ip" and resolved_ips:
-            lookup_ip = str(resolved_ips[0])
-        deep = _to_bool(step.params.get("deep", ""))
-        intel = _resolve_ipintel_step(
-            str(step.params.get("target", "")),
-            lookup_ip=lookup_ip,
-            deep=deep,
-            timeout_seconds=timeout_seconds,
-        )
-        payload = {
-            "target": step.params.get("target", ""),
-            "lookup_ip": intel.lookup_ip,
-            "asn": intel.asn,
-            "org": intel.org,
-            "domain": getattr(intel, "domain", ""),
-            "location": intel.location,
-            "latency": intel.latency,
-            "vpn_likely": intel.vpn_likely,
-            "confidence": intel.confidence,
-            "jitter": intel.jitter,
-            "bandwidth": intel.bandwidth,
-            "mss": getattr(intel, "mss", None),
-            "trace": list(intel.trace),
-            "provider": intel.provider,
-            "raw": dict(getattr(intel, "raw", {})),
-            "elapsed_seconds": 0.0,
-        }
-        return StepResult(
-            tool=step.tool,
-            action=step.action,
-            ok=intel.ok,
-            payload=payload,
-            error=intel.error,
-        )
-
-    if step.tool == "http":
-        http_result = _probe_http_step(
-            str(step.params.get("target", "")),
-            mode=step.action,
-            host=str(step.params.get("host", "")),
-            scheme=str(step.params.get("scheme", "")),
-            path=str(step.params.get("path", "")),
-            port=str(step.params.get("port", "")),
-            host_header=str(step.params.get("host_header", "")),
-            timeout=timeout_seconds if timeout_seconds is not None else 10.0,
-            command_executor=command_executor,
-        )
-        payload = {
-            "target": step.params.get("target", ""),
-            "mode": step.action,
-            "provider": http_result.provider,
-            "findings": [
-                {
-                    "url": finding.url,
-                    "status_code": finding.status_code,
-                    "title": finding.title,
-                    "redirect_to": finding.redirect_to,
-                    "headers": dict(finding.headers),
-                    "ok": finding.ok,
-                    "error": finding.error,
-                }
-                for finding in http_result.findings
-            ],
-            "elapsed_seconds": http_result.elapsed_seconds,
-        }
-        return StepResult(
-            tool=step.tool,
-            action=step.action,
-            ok=http_result.ok,
-            payload=payload,
-            error=http_result.error,
-        )
-
-    if step.tool == "httpx":
-        runtime_state = runtime_state or {}
-        discovered_endpoints = _httpx_discovery_endpoints(runtime_state)
-        if step.action == "discover_http_services" or discovered_endpoints:
-            httpx_result = discover_http_services(
-                discovered_endpoints or (f"{step.params.get('host', '')}:{step.params.get('port', '')}",),
-                timeout_seconds=timeout_seconds if timeout_seconds is not None else 10.0,
-                executor=command_executor,
-            )
-        else:
-            httpx_result = probe_httpx(
-                str(step.params.get("target", "")),
-                mode="http_ip_probe" if step.params.get("target_type") == "ip" else "http_probe",
-                host=str(step.params.get("host", "")),
-                scheme=str(step.params.get("scheme", "")),
-                path=str(step.params.get("path", "")),
-                port=str(step.params.get("port", "")),
-                timeout_seconds=timeout_seconds if timeout_seconds is not None else 10.0,
-                executor=command_executor,
-            )
-        payload = {
-            "target": httpx_result.target,
-            "provider": "httpx",
-            "findings": [
-                {
-                    "url": finding.url,
-                    "status_code": finding.status_code,
-                    "title": finding.title,
-                    "redirect_to": finding.redirect_to,
-                    "technologies": list(finding.technologies),
-                    "webserver": finding.webserver,
-                    "tls": dict(finding.tls),
-                }
-                for finding in httpx_result.findings
-            ],
-            "skipped": httpx_result.skipped,
-            "negative_observation": httpx_result.negative_observation,
-            "raw_output": httpx_result.raw_output,
-            "elapsed_seconds": httpx_result.elapsed_seconds,
-        }
-        return StepResult(step.tool, step.action, httpx_result.ok, payload, httpx_result.error)
-
-    if step.tool == "whatweb":
-        whatweb_result = fingerprint_with_whatweb(
-            str(step.params.get("target", "")),
-            mode="http_ip_probe" if step.params.get("target_type") == "ip" else "http_probe",
-            host=str(step.params.get("host", "")),
-            scheme=str(step.params.get("scheme", "")),
-            path=str(step.params.get("path", "")),
-            port=str(step.params.get("port", "")),
-            timeout_seconds=timeout_seconds or 20.0,
-            executor=command_executor,
-        )
-        payload = {
-            "target": whatweb_result.target,
-            "provider": "whatweb",
-            "findings": [
-                {"url": finding.url, "status_code": finding.status_code, "title": finding.title,
-                 "webserver": finding.webserver, "technologies": list(finding.technologies), "plugins": list(finding.plugins)}
-                for finding in whatweb_result.findings
-            ],
-            "skipped": whatweb_result.skipped,
-            "negative_observation": whatweb_result.negative_observation,
-            "raw_output": whatweb_result.raw_output,
-            "elapsed_seconds": whatweb_result.elapsed_seconds,
-        }
-        return StepResult(step.tool, step.action, whatweb_result.ok, payload, whatweb_result.error)
-
-    if step.tool == "katana":
-        katana_result = crawl_with_katana(
-            str(step.params.get("target", "")),
-            host=str(step.params.get("host", "")),
-            scheme=str(step.params.get("scheme", "")),
-            path=str(step.params.get("path", "")),
-            port=str(step.params.get("port", "")),
-            timeout_seconds=timeout_seconds or 30.0,
-            executor=command_executor,
-        )
-        payload = {
-            "target": katana_result.target,
-            "crawl_url": katana_result.crawl_url,
-            "provider": "katana",
-            "findings": [
-                {
-                    "url": finding.url,
-                    "method": finding.method,
-                    "status_code": finding.status_code,
-                    "title": finding.title,
-                    "technologies": list(finding.technologies),
-                }
-                for finding in katana_result.findings
-            ],
-            "skipped": katana_result.skipped,
-            "negative_observation": katana_result.negative_observation,
-            "raw_output": katana_result.raw_output,
-            "elapsed_seconds": katana_result.elapsed_seconds,
-        }
-        return StepResult(step.tool, step.action, katana_result.ok, payload, katana_result.error)
-
-    if step.tool == "rpcinfo":
-        rpc_result = query_rpcinfo(
-            str(step.params.get("host") or step.params.get("target") or ""),
-            timeout_seconds=timeout_seconds or 12.0,
-            executor=command_executor,
-        )
-        payload = {
-            "target": rpc_result.target,
-            "provider": "rpcinfo",
-            "registrations": [
-                {"program": item.program, "version": item.version, "protocol": item.protocol, "port": item.port, "service": item.service}
-                for item in rpc_result.registrations
-            ],
-            "skipped": rpc_result.skipped,
-            "negative_observation": rpc_result.negative_observation,
-            "raw_output": rpc_result.raw_output,
-            "elapsed_seconds": rpc_result.elapsed_seconds,
-        }
-        return StepResult(step.tool, step.action, rpc_result.ok, payload, rpc_result.error)
-
-    if step.tool == "smbclient":
-        smb_result = enumerate_smb_shares(
-            str(step.params.get("host") or step.params.get("target") or ""),
-            port=_to_port(step.params.get("port") or "445"),
-            timeout_seconds=timeout_seconds or 15.0,
-            executor=command_executor,
-        )
-        payload = {
-            "target": smb_result.target,
-            "port": smb_result.port,
-            "provider": "smbclient",
-            "shares": [{"name": share.name, "type": share.type, "comment": share.comment} for share in smb_result.shares],
-            "skipped": smb_result.skipped,
-            "negative_observation": smb_result.negative_observation,
-            "warnings": list(smb_result.warnings),
-            "raw_output": smb_result.raw_output,
-            "elapsed_seconds": smb_result.elapsed_seconds,
-        }
-        return StepResult(step.tool, step.action, smb_result.ok, payload, smb_result.error)
-
-    if step.tool == "sslyze":
-        port = int(str(step.params.get("port") or "443"))
-        sslyze_result = inspect_tls_configuration(
-            str(step.params.get("host", "")), port=port,
-            timeout_seconds=timeout_seconds or 45.0, executor=command_executor,
-        )
-        payload = {
-            "host": sslyze_result.host, "port": sslyze_result.port, "provider": "sslyze",
-            "scans": [
-                {"host": scan.host, "port": scan.port, "protocols": list(scan.protocols),
-                 "ciphers": list(scan.ciphers), "findings": list(scan.findings)}
-                for scan in sslyze_result.scans
-            ],
-            "skipped": sslyze_result.skipped, "negative_observation": sslyze_result.negative_observation,
-            "raw_output": sslyze_result.raw_output, "elapsed_seconds": sslyze_result.elapsed_seconds,
-        }
-        return StepResult(step.tool, step.action, sslyze_result.ok, payload, sslyze_result.error)
-
-    if step.tool == "tls":
-        tls_result = inspect_tls(
-            str(step.params.get("host", "")),
-            port=_to_port(step.params.get("port", "443")),
-            server_name=str(step.params.get("server_name", "")),
-            timeout_seconds=timeout_seconds if timeout_seconds is not None else 10.0,
-        )
-        payload = {
-            "target": step.params.get("target", ""),
-            "host": tls_result.host,
-            "port": tls_result.port,
-            "subject": tls_result.subject,
-            "issuer": tls_result.issuer,
-            "sans": list(tls_result.sans),
-            "not_before": tls_result.not_before,
-            "not_after": tls_result.not_after,
-            "days_until_expiry": tls_result.days_until_expiry,
-            "protocol": tls_result.protocol,
-            "cipher": tls_result.cipher,
-            "certificate_sha256": tls_result.certificate_sha256,
-            "provider": tls_result.provider,
-            "certificate_parser": tls_result.certificate_parser,
-            "warnings": list(tls_result.warnings),
-            "raw_output": tls_result.raw_output,
-            "negative_observation": "connection refused" in tls_result.error.lower(),
-            "elapsed_seconds": tls_result.elapsed_seconds,
-        }
-        return StepResult(step.tool, step.action, tls_result.ok, payload, tls_result.error)
-
-    if step.tool == "fingerprint":
-        fingerprint = fingerprint_http(
-            str(step.params.get("target", "")),
-            mode="http_ip_probe" if step.params.get("target_type") == "ip" else "http_probe",
-            host=str(step.params.get("host", "")),
-            scheme=str(step.params.get("scheme", "")),
-            path=str(step.params.get("path", "")),
-            port=str(step.params.get("port", "")),
-            timeout=timeout_seconds if timeout_seconds is not None else 10.0,
-        )
-        payload = {
-            "target": fingerprint.target,
-            "server": fingerprint.server,
-            "framework": fingerprint.framework,
-            "cms": fingerprint.cms,
-            "javascript": fingerprint.javascript,
-            "security_headers": list(fingerprint.security_headers),
-            "cookies": list(fingerprint.cookies),
-            "confidence": fingerprint.confidence,
-            "evidence": list(fingerprint.evidence),
-            "provider": fingerprint.provider,
-            "skipped": fingerprint.skipped,
-            "warnings": list(fingerprint.warnings),
-            "elapsed_seconds": fingerprint.elapsed_seconds,
-        }
-        return StepResult(step.tool, step.action, fingerprint.ok, payload, fingerprint.error)
-
-    if step.tool == "rdap":
-        runtime_state = runtime_state or {}
-        resolved_ips = runtime_state.get("resolved_ips", [])
-        address = str(step.params.get("host", "")) if step.params.get("target_type") == "ip" else ""
-        if not address and isinstance(resolved_ips, list) and resolved_ips:
-            address = str(resolved_ips[0])
-        domain = str(step.params.get("host", "")) if step.params.get("target_type") != "ip" else ""
-        rdap = resolve_rdap(
-            domain=domain,
-            address=address,
-            timeout_seconds=timeout_seconds if timeout_seconds is not None else 10.0,
-        )
-        payload = {
-            "target": step.params.get("target", ""),
-            "domain": rdap.domain,
-            "registrar": rdap.registrar,
-            "created": rdap.created,
-            "expires": rdap.expires,
-            "status": list(rdap.status),
-            "address": rdap.address,
-            "network": rdap.network,
-            "organization": rdap.organization,
-            "asn": rdap.asn,
-            "provider": rdap.provider,
-            "negative_observation": bool(getattr(rdap, "negative_observation", False)),
-            "warnings": list(rdap.warnings),
-            "raw": dict(rdap.raw),
-            "elapsed_seconds": rdap.elapsed_seconds,
-        }
-        return StepResult(step.tool, step.action, rdap.ok, payload, rdap.error)
-
-    if step.tool == "naabu":
-        naabu_result = scan_ports_with_naabu(
-            str(step.params.get("target", "")),
-            ports=str(step.params.get("ports", "")),
-            top_ports=str(step.params.get("top_ports", "")),
-            timeout_seconds=timeout_seconds or 60.0,
-            executor=command_executor,
-        )
-        payload = {
-            "target": naabu_result.target,
-            "provider": "naabu",
-            "ports": [
-                {"host": item.host, "port": item.port, "protocol": item.protocol, "state": "open"}
-                for item in naabu_result.ports
-            ],
-            "skipped": naabu_result.skipped,
-            "negative_observation": naabu_result.negative_observation,
-            "complete": bool(getattr(naabu_result, "complete", True)),
-            "warnings": list(getattr(naabu_result, "warnings", ())),
-            "raw_output": naabu_result.raw_output,
-            "elapsed_seconds": naabu_result.elapsed_seconds,
-        }
-        return StepResult(step.tool, step.action, naabu_result.ok, payload, naabu_result.error)
-
-    if step.tool == "nmap":
-        runtime_state = runtime_state or {}
-        naabu_ports = runtime_state.get("naabu_open_ports")
-        if runtime_state.get("naabu_completed") and runtime_state.get("naabu_complete") and isinstance(naabu_ports, list) and not naabu_ports:
-            return StepResult(
-                step.tool,
-                step.action,
-                ok=False,
-                payload={
-                    "target": step.params.get("target", ""),
-                    "ports": [],
-                    "provider": "nmap",
-                    "skipped": True,
-                    "skip_reason": "Naabu found no open TCP ports",
-                    "negative_observation": True,
-                },
-                error="Naabu found no open TCP ports",
-            )
-        discovered_ports = _nmap_ports_from_naabu(naabu_ports) if runtime_state.get("naabu_completed") and runtime_state.get("naabu_complete") else ""
-        execution = _execute_nmap_step(
-            NmapRequest(
-                target=step.params.get("target", ""),
-                ports=discovered_ports or step.params.get("ports", ""),
-                top_ports="" if discovered_ports else step.params.get("top_ports", ""),
-                profile=step.params.get("profile", "default"),
-                timing=step.params.get("timing", ""),
-                service_detection=_to_bool(step.params.get("service_detection", "")),
-                scripts=_to_bool(step.params.get("scripts", "")),
-                os_detection=_to_bool(step.params.get("os_detection", "")),
-                use_default_timing=_to_bool(step.params.get("use_default_timing", "true")),
-            ),
-            executor=command_executor,
-            timeout_seconds=timeout_seconds,
-        )
-        payload = {
-            "provider": "nmap",
-            "command": list(display_command(execution.command)),
-            "target": execution.parsed.target,
-            "host_status": execution.parsed.host_status,
-            "raw_output": execution.parsed.raw_output,
-            "ports": [
-                {
-                    "port": port.port,
-                    "protocol": port.protocol,
-                    "state": port.state,
-                    "service": port.service,
-                    **({"version": port.version} if port.version else {}),
-                }
-                for port in execution.parsed.ports
-            ],
-            "warnings": list(execution.parsed.warnings),
-            "negative_observation": execution.ok and not any(
-                str(port.state).lower() in {"open", "filtered"} for port in execution.parsed.ports
-            ),
-            "system": {
-                "device": getattr(execution.parsed, "device_type", ""),
-                "os": getattr(execution.parsed, "operating_system", ""),
-                "kernel": getattr(execution.parsed, "kernel", ""),
-                "cpe": getattr(execution.parsed, "cpe", ""),
-                "distance": getattr(execution.parsed, "distance", ""),
-            },
-        }
-        counts = port_state_counts(payload["ports"])
-        return StepResult(
-            tool=step.tool,
-            action=step.action,
-            ok=execution.ok,
-            payload={
-                **payload,
-                "open_ports": counts["open"],
-                "filtered_ports": counts["filtered"],
-                "interesting_ports": counts["interesting"],
-                "elapsed_seconds": execution.elapsed_seconds,
-            },
-            error=execution.error or execution.stderr,
-        )
-
-    return StepResult(tool=step.tool, action=step.action, ok=False, payload={}, error="unsupported tool")
-
-
-def _to_bool(value: str) -> bool:
-    return str(value).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _to_port(value: object) -> int:
-    try:
-        port = int(str(value))
-    except (TypeError, ValueError):
-        return 443
-    return port if 1 <= port <= 65535 else 443
-
-
-def _update_runtime_state(runtime_state: dict[str, object], result: StepResult) -> None:
-    if result.tool == "dns":
-        resolved_ips = result.payload.get("resolved_ips", [])
-        if isinstance(resolved_ips, list):
-            runtime_state["resolved_ips"] = list(resolved_ips)
-    if result.tool == "naabu":
-        ports = result.payload.get("ports", [])
-        if isinstance(ports, list):
-            runtime_state["naabu_open_ports"] = list(ports)
-            runtime_state["naabu_completed"] = result.ok
-            runtime_state["naabu_complete"] = bool(result.payload.get("complete", False))
-            _add_open_tcp_endpoints(runtime_state, ports, host=str(result.payload.get("target", "")))
-    if result.tool == "nmap":
-        ports = result.payload.get("ports", [])
-        if isinstance(ports, list):
-            _add_open_tcp_endpoints(runtime_state, ports, host=str(result.payload.get("target", "")))
-
-
-def _add_open_tcp_endpoints(runtime_state: dict[str, object], ports: list[object], *, host: str = "") -> None:
-    """Store open TCP endpoints for protocol discovery, without port heuristics."""
-    endpoints = runtime_state.setdefault("open_tcp_endpoints", [])
-    if not isinstance(endpoints, list):
-        return
-    host = host.strip()
-    for item in ports:
-        if not isinstance(item, dict) or str(item.get("state", "")).lower() != "open":
-            continue
-        if str(item.get("protocol", "tcp")).lower() != "tcp":
-            continue
-        candidate_host = str(item.get("host", "")).strip()
-        if candidate_host:
-            host = candidate_host
-        try:
-            port = int(item.get("port", 0))
-        except (TypeError, ValueError):
-            continue
-        if host and 1 <= port <= 65535:
-            endpoint = f"{host}:{port}"
-            if endpoint not in endpoints:
-                endpoints.append(endpoint)
-
-
-def _httpx_discovery_endpoints(runtime_state: dict[str, object]) -> tuple[str, ...]:
-    """Return previously discovered TCP endpoints in stable order."""
-    endpoints = runtime_state.get("open_tcp_endpoints", [])
-    if not isinstance(endpoints, list):
-        return ()
-    return tuple(sorted({str(endpoint).strip() for endpoint in endpoints if str(endpoint).strip()}))
-
-
-def _nmap_ports_from_naabu(value: object) -> str:
-    """Return a stable Nmap port expression from successful Naabu discovery."""
-    if not isinstance(value, list):
-        return ""
-    ports: set[int] = set()
-    for item in value:
-        if not isinstance(item, dict) or str(item.get("protocol", "tcp")).lower() != "tcp":
-            continue
-        try:
-            port = int(item.get("port", 0))
-        except (TypeError, ValueError):
-            continue
-        if 1 <= port <= 65535:
-            ports.add(port)
-    return ",".join(str(port) for port in sorted(ports))
-
-
-def _step_timeout_seconds(tool: str) -> float | None:
-    """Return the configured timeout for one recon step tool."""
-    config = get_tool_config("recon")
-    execution_control = config.get("execution_control", {})
-    if not isinstance(execution_control, dict):
-        return None
-    timeouts = execution_control.get("timeouts", {})
-    if not isinstance(timeouts, dict):
-        return None
-
-    key_map = {
-        "dns": "dns_seconds",
-        "subfinder": "dns_seconds",
-        "ipintel": "ipintel_seconds",
-        "http": "http_seconds",
-        "httpx": "http_seconds",
-        "whatweb": "http_fingerprint_seconds",
-        "katana": "katana_seconds",
-        "rpcinfo": "nmap_seconds",
-        "smbclient": "smbclient_seconds",
-        "fingerprint": "http_fingerprint_seconds",
-        "tls": "tls_seconds",
-        "sslyze": "tls_seconds",
-        "rdap": "rdap_seconds",
-        "naabu": "naabu_seconds",
-        "nmap": "port_scan_seconds",
-    }
-    raw = timeouts.get(key_map.get(tool, ""))
-    try:
-        if raw in {None, "", 0, "0"}:
-            return None
-        value = float(raw)
-    except (TypeError, ValueError):
-        return None
-    return value if value > 0 else None
-
-
-def _plan_step_groups(indexed_steps: tuple[tuple[int, PlanStep], ...]) -> list[tuple[tuple[int, PlanStep], ...]]:
-    """Group plan steps into deterministic execution waves."""
-    groups: dict[int, list[tuple[int, PlanStep]]] = {}
-    for indexed_step in indexed_steps:
-        group_id = _effective_execution_group(indexed_step[1])
-        groups.setdefault(group_id, []).append(indexed_step)
-    return [tuple(groups[group_id]) for group_id in sorted(groups)]
-
-
-def _execute_step_group(
-    steps: tuple[tuple[int, PlanStep], ...],
-    *,
-    command_executor: Callable[[tuple[str, ...]], CommandResult] | None,
-    runtime_state: dict[str, object],
-    control: ExecutionControl,
-) -> list[tuple[int, StepResult]]:
-    """Execute one deterministic step wave, in parallel when safe."""
-    if len(steps) <= 1:
-        index, step = steps[0]
-        try:
-            return [(index, execute_step(step, command_executor=command_executor, runtime_state=runtime_state))]
-        except KeyboardInterrupt:
-            control.cancel()
-            return []
-
-    base_state = dict(runtime_state)
-    futures: list[tuple[int, Future[StepResult]]] = []
-    with ThreadPoolExecutor(max_workers=len(steps)) as pool:
-        for index, step in steps:
-            futures.append(
-                (
-                    index,
-                    pool.submit(
-                        copy_context().run,
-                        execute_step,
-                        step,
-                        command_executor=command_executor,
-                        runtime_state=dict(base_state),
-                    ),
-                )
-            )
-
-        results: list[tuple[int, StepResult]] = []
-        try:
-            for index, future in futures:
-                results.append((index, future.result()))
-        except KeyboardInterrupt:
-            control.cancel()
-            for _, future in futures:
-                future.cancel()
-            return []
-    return results
-
-
-def _effective_execution_group(step: PlanStep) -> int:
-    """Infer a safe execution group, even for manually-constructed plan steps."""
-    if step.execution_group:
-        return step.execution_group
-
-    target_type = str(step.params.get("target_type", "")).strip().lower()
-    if step.tool == "ipintel":
-        return 0 if target_type == "ip" else 1
-    if step.tool == "fingerprint":
-        return 1
-    if step.tool in {"whatweb", "katana"}:
-        return 1
-    if step.tool == "rdap":
-        return 2
-    if step.tool == "nmap":
-        return 1 if target_type == "ip" else 2
-    return 0
-
-
-def _resolve_dns_step(
-    host: str,
-    *,
-    command_executor: Callable[[tuple[str, ...]], CommandResult] | None,
-    timeout_seconds: float | None,
-):
-    try:
-        return resolve_dns(host, command_executor=command_executor, timeout_seconds=timeout_seconds)
-    except TypeError:
-        return resolve_dns(host, command_executor=command_executor)
-
-
-def _resolve_ipintel_step(
-    target: str,
-    *,
-    lookup_ip: str,
-    deep: bool,
-    timeout_seconds: float | None,
-):
-    try:
-        return resolve_ipintel(target, lookup_ip=lookup_ip, deep=deep, timeout_seconds=timeout_seconds)
-    except TypeError:
-        return resolve_ipintel(target, lookup_ip=lookup_ip, deep=deep)
-
-
-def _probe_http_step(
-    target: str,
-    *,
-    mode: str,
-    host: str,
-    scheme: str,
-    path: str,
-    port: str,
-    host_header: str,
-    timeout: float,
-    command_executor: Callable[[tuple[str, ...]], CommandResult] | None,
-):
-    try:
-        return probe_http(
-            target,
-            mode=mode,
-            host=host,
-            scheme=scheme,
-            path=path,
-            port=port,
-            host_header=host_header,
-            timeout=timeout,
-            command_executor=command_executor,
-        )
-    except TypeError:
-        return probe_http(
-            target,
-            mode=mode,
-            host=host,
-            scheme=scheme,
-            path=path,
-            port=port,
-            host_header=host_header,
-            command_executor=command_executor,
-        )
-
-
-def _execute_nmap_step(
-    request: NmapRequest,
-    *,
-    executor: Callable[[tuple[str, ...]], CommandResult] | None,
-    timeout_seconds: float | None,
-):
-    try:
-        return execute_nmap(request, executor=executor, timeout_seconds=timeout_seconds)
-    except TypeError:
-        return execute_nmap(request, executor=executor)
+    provider = get_recon_tool(step.tool)
+    handler_name = provider.handler if provider is not None else step.tool
+    handler = (handler_registry or _DEFAULT_HANDLERS).resolve(handler_name)
+    if handler is None:
+        return StepResult(step.tool, step.action, False, {}, f"unsupported tool: {step.tool}")
+    return handler(step, HandlerContext(command_executor=command_executor, artifacts=evidence))
