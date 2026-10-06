@@ -2,52 +2,37 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import replace
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from blackline.core.recon import ReconPipeline, build_recon_pipeline
 from blackline.core.recon.models import ReconStep
 from blackline.core.recon.scan_policy import nmap_policy_params
+from blackline.core.recon.tool_registry import get_recon_tool
 from blackline.engine.context import ExecutionContext
+from blackline.engine.models import ExecutionPlan, PlanStep, StepDependency, StepId
 
 if TYPE_CHECKING:
     from blackline.vector.candidate import Candidate
-
-
-@dataclass(frozen=True, slots=True)
-class PlanStep:
-    """One executable step in a plan."""
-
-    tool: str
-    action: str
-    params: dict[str, str] = field(default_factory=dict)
-    execution_group: int = 0
-
-
-@dataclass(frozen=True, slots=True)
-class ExecutionPlan:
-    """Small linear execution plan."""
-
-    context: ExecutionContext
-    steps: tuple[PlanStep, ...]
-    pipeline: ReconPipeline | None = None
 
 
 def build_plan(context: ExecutionContext) -> ExecutionPlan:
     """Build a linear plan for the current context."""
     if context.module == "recon":
         pipeline = build_recon_pipeline(context.params.get("target", ""), params=context.params)
-        return ExecutionPlan(
-            context=context,
-            steps=tuple(
+        return _execution_plan(
+            context,
+            (
                 _plan_step_from_recon_step(step, context.params)
                 for step in pipeline.steps
-                if step.tool in {"dns", "subfinder", "ipintel", "http", "httpx", "fingerprint", "whatweb", "katana", "tls", "sslyze", "rdap", "rpcinfo", "smbclient", "naabu", "nmap"}
+                if _is_plannable_provider(step.tool)
             ),
             pipeline=pipeline,
+            reason=f"selected by the {context.params.get('strategy', 'balanced') or 'balanced'} recon profile",
         )
 
-    return ExecutionPlan(context=context, steps=())
+    return _execution_plan(context, ())
 
 
 def build_essential_recon_plan(context: ExecutionContext) -> ExecutionPlan:
@@ -63,7 +48,12 @@ def build_essential_recon_plan(context: ExecutionContext) -> ExecutionPlan:
         for step in pipeline.steps
         if step.tool in essential_tools
     )
-    return ExecutionPlan(context=context, steps=steps, pipeline=pipeline)
+    return _execution_plan(
+        context,
+        steps,
+        pipeline=pipeline,
+        reason="required for adaptive recon orientation",
+    )
 
 
 def build_followup_plan(context: ExecutionContext, candidates: tuple[Candidate, ...]) -> ExecutionPlan:
@@ -73,7 +63,7 @@ def build_followup_plan(context: ExecutionContext, candidates: tuple[Candidate, 
     tool mapping, so Vector never learns binary flags or request syntax.
     """
     if context.module != "recon" or context.normalized_target is None:
-        return ExecutionPlan(context=context, steps=())
+        return _execution_plan(context, ())
     target = context.normalized_target
     steps: list[PlanStep] = []
     for candidate in candidates:
@@ -172,7 +162,7 @@ def build_followup_plan(context: ExecutionContext, candidates: tuple[Candidate, 
                     execution_group=0,
                 )
             )
-    return ExecutionPlan(context=context, steps=tuple(steps))
+    return _execution_plan(context, steps, reason="selected by adaptive recon planning")
 
 
 def _endpoint(value: str, *, fallback: str) -> tuple[str, int] | None:
@@ -190,97 +180,9 @@ def _endpoint(value: str, *, fallback: str) -> tuple[str, int] | None:
 
 
 def _plan_step_from_recon_step(step: ReconStep, params: dict[str, str]) -> PlanStep:
-    if step.tool == "dns":
+    if step.tool not in {"naabu", "nmap"}:
         return PlanStep(
-            tool="dns",
-            action=step.name,
-            params={key: str(value) for key, value in step.inputs.items()},
-            execution_group=_execution_group(step),
-        )
-
-    if step.tool == "subfinder":
-        return PlanStep(
-            tool="subfinder",
-            action=step.name,
-            params={key: str(value) for key, value in step.inputs.items()},
-            execution_group=_execution_group(step),
-        )
-
-    if step.tool == "ipintel":
-        return PlanStep(
-            tool="ipintel",
-            action=step.name,
-            params={key: str(value) for key, value in step.inputs.items()},
-            execution_group=_execution_group(step),
-        )
-
-    if step.tool == "http":
-        return PlanStep(
-            tool="http",
-            action=step.name,
-            params={key: str(value) for key, value in step.inputs.items()},
-            execution_group=_execution_group(step),
-        )
-
-    if step.tool == "httpx":
-        return PlanStep(
-            tool="httpx",
-            action=step.name,
-            params={key: str(value) for key, value in step.inputs.items()},
-            execution_group=_execution_group(step),
-        )
-
-    if step.tool == "whatweb":
-        return PlanStep(
-            tool="whatweb",
-            action=step.name,
-            params={key: str(value) for key, value in step.inputs.items()},
-            execution_group=_execution_group(step),
-        )
-
-    if step.tool == "katana":
-        return PlanStep(
-            tool="katana",
-            action=step.name,
-            params={key: str(value) for key, value in step.inputs.items()},
-            execution_group=_execution_group(step),
-        )
-
-    if step.tool == "fingerprint":
-        return PlanStep(
-            tool="fingerprint",
-            action=step.name,
-            params={key: str(value) for key, value in step.inputs.items()},
-            execution_group=_execution_group(step),
-        )
-
-    if step.tool == "rdap":
-        return PlanStep(
-            tool="rdap",
-            action=step.name,
-            params={key: str(value) for key, value in step.inputs.items()},
-            execution_group=_execution_group(step),
-        )
-
-    if step.tool == "rpcinfo":
-        return PlanStep(
-            tool="rpcinfo",
-            action=step.name,
-            params={key: str(value) for key, value in step.inputs.items()},
-            execution_group=_execution_group(step),
-        )
-
-    if step.tool == "tls":
-        return PlanStep(
-            tool="tls",
-            action=step.name,
-            params={key: str(value) for key, value in step.inputs.items()},
-            execution_group=_execution_group(step),
-        )
-
-    if step.tool == "sslyze":
-        return PlanStep(
-            tool="sslyze",
+            tool=step.tool,
             action=step.name,
             params={key: str(value) for key, value in step.inputs.items()},
             execution_group=_execution_group(step),
@@ -317,6 +219,73 @@ def _plan_step_from_recon_step(step: ReconStep, params: dict[str, str]) -> PlanS
         },
         execution_group=_execution_group(step),
     )
+
+
+def _execution_plan(
+    context: ExecutionContext,
+    steps: Iterable[PlanStep],
+    *,
+    pipeline: ReconPipeline | None = None,
+    reason: str = "",
+) -> ExecutionPlan:
+    """Attach deterministic identities and capabilities to planned steps."""
+    materialized = tuple(steps)
+    occurrences: dict[tuple[str, str], int] = {}
+    planned: list[PlanStep] = []
+    for step in materialized:
+        if not isinstance(step, PlanStep):
+            raise TypeError("execution plans may contain only PlanStep values")
+        key = (step.tool, step.action)
+        occurrences[key] = occurrences.get(key, 0) + 1
+        capability = _capability_for(step.tool, step.action)
+        provider = get_recon_tool(step.tool)
+        planned.append(
+            replace(
+                step,
+                id=step.id or StepId(f"{step.tool}.{step.action}.{occurrences[key]}"),
+                capability=step.capability or capability,
+                consumes=step.consumes or (provider.consumes if provider else ()),
+                produces=step.produces or (provider.produces if provider else ()),
+                reason=step.reason or reason,
+                timeout_seconds=step.timeout_seconds if step.timeout_seconds is not None else (provider.timeout_seconds if provider else None),
+            )
+        )
+    planned = _attach_wave_dependencies(planned)
+    plan = ExecutionPlan(context=context, steps=tuple(planned), pipeline=pipeline)
+    plan.validate()
+    return plan
+
+
+def _capability_for(tool: str, action: str) -> str:
+    if tool == "httpx":
+        return "http.discover" if action == "discover_http_services" else "http.probe"
+    provider = get_recon_tool(tool)
+    return provider.capability if provider else tool
+
+
+def _attach_wave_dependencies(steps: list[PlanStep]) -> list[PlanStep]:
+    """Express current execution-wave ordering as explicit DAG edges."""
+    planned: list[PlanStep] = []
+    for step in steps:
+        if step.depends_on or step.execution_group <= 0:
+            planned.append(step)
+            continue
+        dependencies = tuple(
+            StepDependency(
+                StepId(upstream.identity),
+                required_artifacts=tuple(sorted(set(step.consumes) & set(upstream.produces))),
+                optional=True,
+            )
+            for upstream in steps
+            if upstream.execution_group < step.execution_group
+        )
+        planned.append(replace(step, depends_on=dependencies))
+    return planned
+
+
+def _is_plannable_provider(name: str) -> bool:
+    provider = get_recon_tool(name)
+    return bool(provider and provider.lifecycle == "active" and provider.handler)
 
 
 def _execution_group(step: ReconStep) -> int:
