@@ -1,10 +1,15 @@
 import unittest
+from dataclasses import replace
 from types import SimpleNamespace
 import threading
 import time
 
 from blackline.core.recon.models import ReconTarget
 from blackline.engine.executor import ExecutionControl, execute_plan
+from blackline.engine.handlers import discovery as discovery_handlers
+from blackline.engine.handlers import network as network_handlers
+from blackline.engine.handlers import tls as tls_handlers
+from blackline.engine.handlers import web as web_handlers
 from blackline.engine.planner import ExecutionPlan, PlanStep, build_plan
 from blackline.engine.runner import normalize_expression, parse_expression, run_expression
 from blackline.engine.context import ExecutionContext
@@ -14,15 +19,15 @@ from blackline.utils.exec import CommandResult
 
 class EngineRunnerTests(unittest.TestCase):
     def setUp(self):
-        self._original_inspect_tls = execute_plan.__globals__["inspect_tls"]
-        self._original_fingerprint_http = execute_plan.__globals__["fingerprint_http"]
-        self._original_probe_httpx = execute_plan.__globals__["probe_httpx"]
-        self._original_fingerprint_with_whatweb = execute_plan.__globals__["fingerprint_with_whatweb"]
-        self._original_query_rpcinfo = execute_plan.__globals__["query_rpcinfo"]
-        self._original_scan_ports_with_naabu = execute_plan.__globals__["scan_ports_with_naabu"]
-        self._original_inspect_tls_configuration = execute_plan.__globals__["inspect_tls_configuration"]
-        self._original_resolve_rdap = execute_plan.__globals__["resolve_rdap"]
-        execute_plan.__globals__["inspect_tls"] = lambda host, **kwargs: SimpleNamespace(
+        self._original_inspect_tls = tls_handlers.inspect_tls
+        self._original_fingerprint_http = web_handlers.fingerprint_http
+        self._original_probe_httpx = web_handlers.probe_httpx
+        self._original_fingerprint_with_whatweb = web_handlers.fingerprint_with_whatweb
+        self._original_query_rpcinfo = network_handlers.query_rpcinfo
+        self._original_scan_ports_with_naabu = network_handlers.scan_ports_with_naabu
+        self._original_inspect_tls_configuration = tls_handlers.inspect_tls_configuration
+        self._original_resolve_rdap = discovery_handlers.resolve_rdap
+        tls_handlers.inspect_tls = lambda host, **kwargs: SimpleNamespace(
             ok=True,
             host=host,
             port=kwargs.get("port", 443),
@@ -42,7 +47,7 @@ class EngineRunnerTests(unittest.TestCase):
             error="",
             elapsed_seconds=0.1,
         )
-        execute_plan.__globals__["fingerprint_http"] = lambda target, **kwargs: SimpleNamespace(
+        web_handlers.fingerprint_http = lambda target, **kwargs: SimpleNamespace(
             ok=True,
             target=target,
             server="nginx",
@@ -59,7 +64,7 @@ class EngineRunnerTests(unittest.TestCase):
             error="",
             elapsed_seconds=0.1,
         )
-        execute_plan.__globals__["probe_httpx"] = lambda target, **kwargs: SimpleNamespace(
+        web_handlers.probe_httpx = lambda target, **kwargs: SimpleNamespace(
             ok=True,
             target=target,
             findings=(),
@@ -69,24 +74,24 @@ class EngineRunnerTests(unittest.TestCase):
             raw_output="",
             elapsed_seconds=0.1,
         )
-        execute_plan.__globals__["fingerprint_with_whatweb"] = lambda target, **kwargs: SimpleNamespace(
+        web_handlers.fingerprint_with_whatweb = lambda target, **kwargs: SimpleNamespace(
             ok=True, target=target, findings=(), error="", skipped=False,
             negative_observation=False, raw_output="", elapsed_seconds=0.1,
         )
-        execute_plan.__globals__["query_rpcinfo"] = lambda target, **kwargs: SimpleNamespace(
+        network_handlers.query_rpcinfo = lambda target, **kwargs: SimpleNamespace(
             ok=True, target=target, registrations=(), error="", skipped=False,
             negative_observation=False, raw_output="", elapsed_seconds=0.1,
         )
-        execute_plan.__globals__["scan_ports_with_naabu"] = lambda target, **kwargs: SimpleNamespace(
+        network_handlers.scan_ports_with_naabu = lambda target, **kwargs: SimpleNamespace(
             ok=True, target=target,
             ports=(SimpleNamespace(host=target, port=22, protocol="tcp"), SimpleNamespace(host=target, port=80, protocol="tcp")),
             error="", skipped=False, negative_observation=False, raw_output="", elapsed_seconds=0.1,
         )
-        execute_plan.__globals__["inspect_tls_configuration"] = lambda host, **kwargs: SimpleNamespace(
+        tls_handlers.inspect_tls_configuration = lambda host, **kwargs: SimpleNamespace(
             ok=True, host=host, port=kwargs.get("port", 443), scans=(), error="", skipped=False,
             negative_observation=False, raw_output="", elapsed_seconds=0.1,
         )
-        execute_plan.__globals__["resolve_rdap"] = lambda domain="", address="", **kwargs: SimpleNamespace(
+        discovery_handlers.resolve_rdap = lambda domain="", address="", **kwargs: SimpleNamespace(
             ok=True,
             domain=domain,
             registrar="Example Registrar",
@@ -105,14 +110,14 @@ class EngineRunnerTests(unittest.TestCase):
         )
 
     def tearDown(self):
-        execute_plan.__globals__["inspect_tls"] = self._original_inspect_tls
-        execute_plan.__globals__["fingerprint_http"] = self._original_fingerprint_http
-        execute_plan.__globals__["probe_httpx"] = self._original_probe_httpx
-        execute_plan.__globals__["fingerprint_with_whatweb"] = self._original_fingerprint_with_whatweb
-        execute_plan.__globals__["query_rpcinfo"] = self._original_query_rpcinfo
-        execute_plan.__globals__["scan_ports_with_naabu"] = self._original_scan_ports_with_naabu
-        execute_plan.__globals__["inspect_tls_configuration"] = self._original_inspect_tls_configuration
-        execute_plan.__globals__["resolve_rdap"] = self._original_resolve_rdap
+        tls_handlers.inspect_tls = self._original_inspect_tls
+        web_handlers.fingerprint_http = self._original_fingerprint_http
+        web_handlers.probe_httpx = self._original_probe_httpx
+        web_handlers.fingerprint_with_whatweb = self._original_fingerprint_with_whatweb
+        network_handlers.query_rpcinfo = self._original_query_rpcinfo
+        network_handlers.scan_ports_with_naabu = self._original_scan_ports_with_naabu
+        tls_handlers.inspect_tls_configuration = self._original_inspect_tls_configuration
+        discovery_handlers.resolve_rdap = self._original_resolve_rdap
 
     def test_execute_plan_emits_step_progress(self):
         context = ExecutionContext(expression="unknown", module="unknown")
@@ -285,7 +290,7 @@ class EngineRunnerTests(unittest.TestCase):
         )
 
         calls = {"count": 0}
-        original_probe_http = execute_plan.__globals__["probe_http"]
+        original_probe_http = web_handlers.probe_http
 
         class FakeHttpResult:
             def __init__(self) -> None:
@@ -322,11 +327,11 @@ class EngineRunnerTests(unittest.TestCase):
                 elapsed_seconds=41.2,
             )
 
-        execute_plan.__globals__["probe_http"] = lambda *args, **kwargs: FakeHttpResult()
+        web_handlers.probe_http = lambda *args, **kwargs: FakeHttpResult()
         try:
             results = execute_plan(plan, command_executor=fake_executor)
         finally:
-            execute_plan.__globals__["probe_http"] = original_probe_http
+            web_handlers.probe_http = original_probe_http
 
         self.assertEqual(len(results), 11)
         self.assertTrue(results[0].ok)
@@ -369,8 +374,8 @@ class EngineRunnerTests(unittest.TestCase):
             )
         )
 
-        original_probe_http = execute_plan.__globals__["probe_http"]
-        original_resolve_ipintel = execute_plan.__globals__["resolve_ipintel"]
+        original_probe_http = web_handlers.probe_http
+        original_resolve_ipintel = discovery_handlers.resolve_ipintel
         dns_started = threading.Event()
         http_started = threading.Event()
         overlap = {"ipintel_saw_http": False, "http_saw_ipintel": False}
@@ -421,13 +426,13 @@ class EngineRunnerTests(unittest.TestCase):
                 elapsed_seconds=1.0,
             )
 
-        execute_plan.__globals__["probe_http"] = fake_probe_http
-        execute_plan.__globals__["resolve_ipintel"] = fake_resolve_ipintel
+        web_handlers.probe_http = fake_probe_http
+        discovery_handlers.resolve_ipintel = fake_resolve_ipintel
         try:
             results = execute_plan(plan, command_executor=fake_executor)
         finally:
-            execute_plan.__globals__["probe_http"] = original_probe_http
-            execute_plan.__globals__["resolve_ipintel"] = original_resolve_ipintel
+            web_handlers.probe_http = original_probe_http
+            discovery_handlers.resolve_ipintel = original_resolve_ipintel
 
         self.assertTrue(overlap["ipintel_saw_http"])
         self.assertTrue(overlap["http_saw_ipintel"])
@@ -443,11 +448,11 @@ class EngineRunnerTests(unittest.TestCase):
             )
         )
 
-        original_resolve_dns = execute_plan.__globals__["resolve_dns"]
-        original_probe_http = execute_plan.__globals__["probe_http"]
-        original_resolve_ipintel = execute_plan.__globals__["resolve_ipintel"]
+        original_resolve_dns = discovery_handlers.resolve_dns
+        original_probe_http = web_handlers.probe_http
+        original_resolve_ipintel = discovery_handlers.resolve_ipintel
 
-        execute_plan.__globals__["resolve_dns"] = lambda host, command_executor=None: SimpleNamespace(
+        discovery_handlers.resolve_dns = lambda host, command_executor=None: SimpleNamespace(
             ok=True,
             host=host,
             records={"A": ["93.184.216.34"], "AAAA": [], "MX": [], "NS": []},
@@ -468,8 +473,8 @@ class EngineRunnerTests(unittest.TestCase):
                 findings=[],
             )
 
-        execute_plan.__globals__["probe_http"] = fake_probe_http
-        execute_plan.__globals__["resolve_ipintel"] = lambda target, lookup_ip="", deep=False: SimpleNamespace(
+        web_handlers.probe_http = fake_probe_http
+        discovery_handlers.resolve_ipintel = lambda target, lookup_ip="", deep=False: SimpleNamespace(
             ok=True,
             target=target,
             lookup_ip=lookup_ip,
@@ -498,16 +503,16 @@ class EngineRunnerTests(unittest.TestCase):
         try:
             results = execute_plan(plan, command_executor=fake_executor)
         finally:
-            execute_plan.__globals__["resolve_dns"] = original_resolve_dns
-            execute_plan.__globals__["probe_http"] = original_probe_http
-            execute_plan.__globals__["resolve_ipintel"] = original_resolve_ipintel
+            discovery_handlers.resolve_dns = original_resolve_dns
+            web_handlers.probe_http = original_probe_http
+            discovery_handlers.resolve_ipintel = original_resolve_ipintel
 
         self.assertEqual([result.tool for result in results], ["dns", "subfinder", "ipintel", "http", "httpx", "fingerprint", "whatweb", "katana", "tls", "sslyze", "rdap", "rpcinfo", "naabu", "nmap"])
         self.assertEqual(results[2].payload["lookup_ip"], "93.184.216.34")
 
     def test_run_expression_tracks_session_runs(self):
         session = EngineSession(active_job="A12F")
-        original_probe_http = run_expression.__globals__["execute_plan"].__globals__["probe_http"]
+        original_probe_http = web_handlers.probe_http
 
         class FakeHttpResult:
             def __init__(self) -> None:
@@ -528,7 +533,7 @@ class EngineRunnerTests(unittest.TestCase):
                 elapsed_seconds=15.5,
             )
 
-        run_expression.__globals__["execute_plan"].__globals__["probe_http"] = lambda *args, **kwargs: FakeHttpResult()
+        web_handlers.probe_http = lambda *args, **kwargs: FakeHttpResult()
         try:
             result = run_expression(
                 "recon[target=192.168.1.1]",
@@ -536,7 +541,7 @@ class EngineRunnerTests(unittest.TestCase):
                 command_executor=fake_executor,
             )
         finally:
-            run_expression.__globals__["execute_plan"].__globals__["probe_http"] = original_probe_http
+            web_handlers.probe_http = original_probe_http
 
         self.assertTrue(result.ok)
         self.assertEqual(result.context.job_id, "A12F")
@@ -553,7 +558,7 @@ class EngineRunnerTests(unittest.TestCase):
             )
         )
 
-        original_probe_http = execute_plan.__globals__["probe_http"]
+        original_probe_http = web_handlers.probe_http
         control = ExecutionControl()
 
         class FakeHttpResult:
@@ -569,11 +574,11 @@ class EngineRunnerTests(unittest.TestCase):
         def fake_executor(args: tuple[str, ...]) -> CommandResult:
             raise KeyboardInterrupt
 
-        execute_plan.__globals__["probe_http"] = lambda *args, **kwargs: FakeHttpResult()
+        web_handlers.probe_http = lambda *args, **kwargs: FakeHttpResult()
         try:
             results = execute_plan(plan, command_executor=fake_executor, control=control)
         finally:
-            execute_plan.__globals__["probe_http"] = original_probe_http
+            web_handlers.probe_http = original_probe_http
 
         self.assertEqual(len(results), 4)
         self.assertEqual([result.tool for result in results], ["ipintel", "http", "tls", "naabu"])
@@ -582,7 +587,7 @@ class EngineRunnerTests(unittest.TestCase):
 
     def test_run_expression_exposes_cancellation_state(self):
         session = EngineSession(active_job="A12F")
-        original_probe_http = run_expression.__globals__["execute_plan"].__globals__["probe_http"]
+        original_probe_http = web_handlers.probe_http
 
         class FakeHttpResult:
             def __init__(self) -> None:
@@ -597,7 +602,7 @@ class EngineRunnerTests(unittest.TestCase):
         def fake_executor(args: tuple[str, ...]) -> CommandResult:
             raise KeyboardInterrupt
 
-        run_expression.__globals__["execute_plan"].__globals__["probe_http"] = lambda *args, **kwargs: FakeHttpResult()
+        web_handlers.probe_http = lambda *args, **kwargs: FakeHttpResult()
         try:
             result = run_expression(
                 "recon[target=192.168.1.1]",
@@ -605,7 +610,7 @@ class EngineRunnerTests(unittest.TestCase):
                 command_executor=fake_executor,
             )
         finally:
-            run_expression.__globals__["execute_plan"].__globals__["probe_http"] = original_probe_http
+            web_handlers.probe_http = original_probe_http
 
         self.assertFalse(result.ok)
         self.assertTrue(result.cancelled)
@@ -622,9 +627,8 @@ class EngineRunnerTests(unittest.TestCase):
             )
         )
 
-        original_probe_http = execute_plan.__globals__["probe_http"]
-        original_execute_nmap = execute_plan.__globals__["execute_nmap"]
-        original_get_tool_config = execute_plan.__globals__["get_tool_config"]
+        original_probe_http = web_handlers.probe_http
+        original_execute_nmap = network_handlers.run_nmap
         captured = {"timeout_seconds": None}
 
         class FakeHttpResult:
@@ -648,17 +652,20 @@ class EngineRunnerTests(unittest.TestCase):
                 stderr="command timed out after 5.0 seconds",
             )
 
-        execute_plan.__globals__["probe_http"] = lambda *args, **kwargs: FakeHttpResult()
-        execute_plan.__globals__["execute_nmap"] = fake_execute_nmap
-        execute_plan.__globals__["get_tool_config"] = lambda name: {
-            "execution_control": {"timeouts": {"port_scan_seconds": 5}}
-        } if name == "recon" else {}
+        web_handlers.probe_http = lambda *args, **kwargs: FakeHttpResult()
+        network_handlers.run_nmap = fake_execute_nmap
+        plan = replace(
+            plan,
+            steps=tuple(
+                replace(step, timeout_seconds=5.0) if step.tool == "nmap" else step
+                for step in plan.steps
+            ),
+        )
         try:
             results = execute_plan(plan)
         finally:
-            execute_plan.__globals__["probe_http"] = original_probe_http
-            execute_plan.__globals__["execute_nmap"] = original_execute_nmap
-            execute_plan.__globals__["get_tool_config"] = original_get_tool_config
+            web_handlers.probe_http = original_probe_http
+            network_handlers.run_nmap = original_execute_nmap
 
         self.assertEqual(captured["timeout_seconds"], 5.0)
         self.assertEqual(results[-1].error, "nmap scan timed out after 5.0 seconds")
