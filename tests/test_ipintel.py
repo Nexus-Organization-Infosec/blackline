@@ -11,6 +11,7 @@ from blackline.cli.commands.utils.shell_cmds import ShellState
 from blackline.core.recon.models import ReconTarget
 from blackline.core.recon.steps.ipintel import execute_ipintel_step
 from blackline.engine.executor import StepResult, execute_plan
+from blackline.engine.handlers import discovery as discovery_handlers
 from blackline.engine.planner import PlanStep, ExecutionPlan
 from blackline.tools.parsers.yougotmapped import parse_yougotmapped_json
 from blackline.tools.intel import yougotmapped
@@ -149,9 +150,9 @@ class IpIntelTests(unittest.TestCase):
             ),
         )
 
-        original_resolve_dns = execute_plan.__globals__["resolve_dns"]
-        original_resolve_ipintel = execute_plan.__globals__["resolve_ipintel"]
-        execute_plan.__globals__["resolve_dns"] = lambda host, command_executor=None: __import__(
+        original_resolve_dns = discovery_handlers.resolve_dns
+        original_resolve_ipintel = discovery_handlers.resolve_ipintel
+        discovery_handlers.resolve_dns = lambda host, command_executor=None: __import__(
             "blackline.tools.dns.resolver", fromlist=["DnsLookupResult"]
         ).DnsLookupResult(
             ok=True,
@@ -160,7 +161,7 @@ class IpIntelTests(unittest.TestCase):
             resolved_ips=["93.184.216.34"],
             provider="custom",
         )
-        execute_plan.__globals__["resolve_ipintel"] = lambda target, lookup_ip="", deep=False: yougotmapped.IpIntelResult(
+        discovery_handlers.resolve_ipintel = lambda target, lookup_ip="", deep=False: yougotmapped.IpIntelResult(
             ok=True,
             target=target,
             lookup_ip=lookup_ip,
@@ -175,8 +176,8 @@ class IpIntelTests(unittest.TestCase):
         try:
             results = execute_plan(plan)
         finally:
-            execute_plan.__globals__["resolve_dns"] = original_resolve_dns
-            execute_plan.__globals__["resolve_ipintel"] = original_resolve_ipintel
+            discovery_handlers.resolve_dns = original_resolve_dns
+            discovery_handlers.resolve_ipintel = original_resolve_ipintel
 
         self.assertEqual(results[1].tool, "ipintel")
         self.assertEqual(results[1].payload["lookup_ip"], "93.184.216.34")
