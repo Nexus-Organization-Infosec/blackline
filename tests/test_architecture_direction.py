@@ -1,6 +1,9 @@
 import unittest
 from pathlib import Path
 
+from blackline.cli.commands.system import jobs_cmd
+from blackline.core.jobs import Job
+
 
 class ArchitectureDirectionTests(unittest.TestCase):
     def test_refined_architecture_scaffold_exists(self):
@@ -35,6 +38,10 @@ class ArchitectureDirectionTests(unittest.TestCase):
         for path in deprecated:
             with self.subTest(path=path):
                 self.assertFalse((root / path).exists())
+
+    def test_job_domain_model_is_not_owned_by_the_cli(self):
+        self.assertIs(jobs_cmd.Job, Job)
+        self.assertEqual(Job.__module__, "blackline.core.jobs")
 
 
 if __name__ == "__main__":
