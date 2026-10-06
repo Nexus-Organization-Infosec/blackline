@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
+import re
 
 from blackline.config.tool_loader import get_recon_tool_registry_config
 from blackline.pathfinder import Pathfinder
@@ -13,18 +15,23 @@ from blackline.pathfinder import Pathfinder
 
 @dataclass(frozen=True, slots=True)
 class ReconTool:
-    """One provider's capability and data-contract metadata."""
+    """One provider's complete planning and execution contract."""
 
     name: str
     capability: str
     backend: str
+    handler: str
+    lifecycle: str = "active"
     binary: str = ""
     provider: str = ""
     produces: tuple[str, ...] = ()
     consumes: tuple[str, ...] = ()
     strategies: tuple[str, ...] = ()
+    dependencies: tuple[str, ...] = ()
     check_args: tuple[str, ...] = ()
     check_success_codes: tuple[int, ...] = (0,)
+    timeout_seconds: float | None = None
+    priority: int = 100
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,13 +64,18 @@ def recon_tools() -> tuple[ReconTool, ...]:
                 name=name,
                 capability=capability,
                 backend=backend,
+                handler=str(raw.get("handler", name)).strip().lower(),
+                lifecycle=str(raw.get("lifecycle", "active")).strip().lower(),
                 binary=str(raw.get("binary", "")).strip(),
                 provider=str(raw.get("provider", "")).strip(),
                 produces=_words(raw.get("produces")),
                 consumes=_words(raw.get("consumes")),
                 strategies=_words(raw.get("strategies")),
+                dependencies=_words(raw.get("dependencies")),
                 check_args=_words(raw.get("check_args")),
                 check_success_codes=_integers(raw.get("check_success_codes"), default=(0,)),
+                timeout_seconds=_positive_float(raw.get("timeout_seconds")),
+                priority=_integer(raw.get("priority"), default=100),
             )
         )
     return tuple(tools)
@@ -77,15 +89,63 @@ def get_recon_tool(name: str) -> ReconTool | None:
 
 def providers_for(product: str, *, strategy: str = "") -> tuple[ReconTool, ...]:
     """Find enabled providers capable of producing one normalized fact type."""
-    return tuple(
+    return _ordered_providers(
         tool
         for tool in recon_tools()
-        if product in tool.produces and is_recon_tool_enabled(tool.name) and (not strategy or strategy in tool.strategies)
+        if tool.lifecycle == "active" and product in tool.produces and is_recon_tool_enabled(tool.name) and tool_supports_strategy(tool, strategy)
     )
+
+
+def providers_for_capability(capability: str, *, strategy: str = "") -> tuple[ReconTool, ...]:
+    """Return enabled providers for one canonical capability in priority order."""
+    normalized = capability.strip().lower()
+    return _ordered_providers(
+        tool
+        for tool in recon_tools()
+        if tool.lifecycle == "active" and tool.capability == normalized and is_recon_tool_enabled(tool.name) and tool_supports_strategy(tool, strategy)
+    )
+
+
+def tool_supports_strategy(tool: ReconTool, strategy: str) -> bool:
+    """Return whether a provider participates in the requested strategy."""
+    normalized = strategy.strip().lower()
+    return not normalized or not tool.strategies or normalized in tool.strategies
+
+
+def validate_recon_tool_registry(*, handler_names: tuple[str, ...] | None = None) -> tuple[str, ...]:
+    """Return deterministic configuration errors without touching the network."""
+    errors: list[str] = []
+    tools = recon_tools()
+    names = [tool.name for tool in tools]
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    errors.extend(f"duplicate provider: {name}" for name in duplicates)
+    known_handlers = set(handler_names) if handler_names is not None else None
+    valid_backends = {"native", "external", "service"}
+    valid_lifecycles = {"active", "planned"}
+    valid_strategies = {"surface", "fast", "balanced", "quiet", "deep", "udp", "auto"}
+    for tool in tools:
+        if not re.fullmatch(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+", tool.capability):
+            errors.append(f"{tool.name}: invalid capability {tool.capability!r}")
+        if tool.backend not in valid_backends:
+            errors.append(f"{tool.name}: invalid backend {tool.backend!r}")
+        if tool.lifecycle not in valid_lifecycles:
+            errors.append(f"{tool.name}: invalid lifecycle {tool.lifecycle!r}")
+        if tool.lifecycle == "active" and not tool.handler:
+            errors.append(f"{tool.name}: missing handler")
+        elif tool.handler and known_handlers is not None and tool.handler not in known_handlers:
+            errors.append(f"{tool.name}: unknown handler {tool.handler!r}")
+        if tool.backend == "external" and not tool.binary:
+            errors.append(f"{tool.name}: external provider requires a binary")
+        unknown_strategies = sorted(set(tool.strategies) - valid_strategies)
+        if unknown_strategies:
+            errors.append(f"{tool.name}: unknown strategies {', '.join(unknown_strategies)}")
+    return tuple(errors)
 
 
 def recon_tool_status(tool: ReconTool) -> str:
     """Return disabled, unavailable, or ready without executing a backend."""
+    if tool.lifecycle != "active":
+        return tool.lifecycle
     if not is_recon_tool_enabled(tool.name):
         return "disabled"
     if tool.backend == "external" and (not tool.binary or not Pathfinder().locate(tool.name, executable=tool.binary).found):
@@ -162,3 +222,24 @@ def _integers(value: object, *, default: tuple[int, ...]) -> tuple[int, ...]:
         except (TypeError, ValueError):
             continue
     return tuple(values) or default
+
+
+def _integer(value: object, *, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _positive_float(value: object) -> float | None:
+    if value is None or value == "" or value == 0 or value == "0":
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
+
+
+def _ordered_providers(tools: Iterable[ReconTool]) -> tuple[ReconTool, ...]:
+    return tuple(sorted(tools, key=lambda tool: (tool.priority, tool.name)))
