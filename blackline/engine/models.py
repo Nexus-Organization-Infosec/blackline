@@ -86,6 +86,18 @@ class StepResult:
         if outcome_is_success(outcome) and not self.ok:
             object.__setattr__(self, "ok", True)
 
+    def to_dict(self) -> dict[str, object]:
+        """Return a persistence-safe representation of the final result."""
+        return {
+            "tool": self.tool,
+            "action": self.action,
+            "ok": self.ok,
+            "payload": dict(self.payload),
+            "error": self.error,
+            "outcome": self.outcome,
+            "artifacts": [artifact.to_dict() for artifact in self.artifacts],
+        }
+
 
 @dataclass(frozen=True, slots=True)
 class PlanStep:
