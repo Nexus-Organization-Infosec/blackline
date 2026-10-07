@@ -13,6 +13,7 @@ from blackline.engine.events import ExecutionEventCallback
 from blackline.engine.planner import ExecutionPlan, build_essential_recon_plan, build_plan
 from blackline.engine.context import ExecutionContext
 from blackline.engine.session import EngineSession
+from blackline.engine.runtime import ExecutionRuntime
 from blackline.utils.exec import CommandResult, CommandTraceCallback
 
 
@@ -42,6 +43,7 @@ def run_expression(
     vector_callback: Callable[[object], None] | None = None,
     command_callback: CommandTraceCallback | None = None,
     event_callback: ExecutionEventCallback | None = None,
+    runtime: ExecutionRuntime | None = None,
 ) -> RunResult:
     """Parse, plan, and execute one expression."""
     session = session or EngineSession()
@@ -57,13 +59,15 @@ def run_expression(
             vector_callback=vector_callback,
             command_callback=command_callback,
             event_callback=event_callback,
+            runtime=runtime,
         )
     plan = build_plan(context)
     if plan_callback is not None:
         plan_callback(plan)
     control = ExecutionControl()
-    results = execute_plan(
+    results = _execute(
         plan,
+        runtime=runtime,
         command_executor=command_executor,
         control=control,
         progress_callback=progress_callback,
@@ -91,6 +95,7 @@ def _run_recon_iteratively(
     vector_callback: Callable[[object], None] | None,
     command_callback: CommandTraceCallback | None,
     event_callback: ExecutionEventCallback | None,
+    runtime: ExecutionRuntime | None,
 ) -> RunResult:
     """Execute essential discovery, then let Vector create bounded follow-ups."""
     from blackline.core.recon.vector_adapter import (
@@ -107,8 +112,9 @@ def _run_recon_iteratively(
     control = ExecutionControl()
     all_steps = list(essential_plan.steps)
     all_results = list(
-        execute_plan(
+        _execute(
             essential_plan,
+            runtime=runtime,
             command_executor=command_executor,
             control=control,
             progress_callback=progress_callback,
@@ -138,8 +144,9 @@ def _run_recon_iteratively(
             break
         if plan_callback is not None:
             plan_callback(followup_plan)
-        latest_results = execute_plan(
+        latest_results = _execute(
             followup_plan,
+            runtime=runtime,
             command_executor=command_executor,
             control=control,
             progress_callback=progress_callback,
@@ -159,6 +166,37 @@ def _run_recon_iteratively(
         cancelled=control.cancelled,
         cancellation_reason=control.cancellation_reason,
         rounds=tuple(rounds),
+    )
+
+
+def _execute(
+    plan: ExecutionPlan,
+    *,
+    runtime: ExecutionRuntime | None,
+    command_executor: Callable[[tuple[str, ...]], CommandResult] | None,
+    control: ExecutionControl,
+    progress_callback: Callable[[ExecutionProgress], None] | None,
+    command_callback: CommandTraceCallback | None,
+    event_callback: ExecutionEventCallback | None,
+) -> tuple[StepResult, ...]:
+    """Use injected services while preserving the legacy executor seam."""
+    if runtime is not None:
+        if command_executor is not None:
+            raise ValueError("command_executor must be configured on ExecutionRuntime when runtime is provided")
+        return runtime.execute(
+            plan,
+            control=control,
+            progress_callback=progress_callback,
+            command_callback=command_callback,
+            event_callback=event_callback,
+        )
+    return execute_plan(
+        plan,
+        command_executor=command_executor,
+        control=control,
+        progress_callback=progress_callback,
+        command_callback=command_callback,
+        event_callback=event_callback,
     )
 
 
