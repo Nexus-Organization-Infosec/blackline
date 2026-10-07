@@ -28,6 +28,10 @@ and this project uses [Semantic Versioning](https://semver.org/).
 - A versioned job domain model and swappable repository contract with atomic,
   backward-compatible JSON persistence.
 - Optional JSONL execution-event journaling and failure-isolated event fan-out.
+- A configurable public execution runtime for composing handlers, scheduler
+  policy, command execution, and permanent or run-local event consumers.
+- A persistence-safe `StepResult` representation and an end-to-end extension
+  contract covering custom handlers, artifacts, jobs, and event replay.
 
 ### Changed
 
