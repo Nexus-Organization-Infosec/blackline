@@ -58,6 +58,7 @@ cli/commands/utils/
 Execution brain.
 
 - runner orchestrates one execution
+- runtime composes handlers, scheduler policy, command execution, and observers
 - planner builds the pipeline
 - executor exposes the public execution API and dispatches registered handlers
 - scheduler owns bounded concurrency, retries, dependency outcomes, and cancellation
@@ -72,6 +73,7 @@ Preferred direction:
 engine/context.py
 engine/session.py
 engine/runner.py
+engine/runtime.py
 engine/planner.py
 engine/executor.py
 engine/scheduler.py
@@ -196,6 +198,11 @@ during migration.
 Event consumers can be fanned out independently. The optional JSONL journal
 provides replayable execution history without making persistence mandatory or
 coupling the scheduler to a database.
+
+`ExecutionRuntime` is the public composition root for embedded use and future
+applications. It centralizes replaceable services without turning them into
+global state. See [Extending Blackline](extending.md) for the supported provider
+and integration path.
 
 `tool_loader` should remain a configuration accessor, not a second planner.
 
