@@ -42,6 +42,7 @@ class StructureTests(unittest.TestCase):
             "clt/errors.py",
             "engine/context.py",
             "engine/runner.py",
+            "engine/runtime.py",
             "engine/planner.py",
             "engine/executor.py",
             "engine/scheduler.py",
